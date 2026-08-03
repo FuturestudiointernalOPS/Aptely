@@ -1,0 +1,26 @@
+services:
+  api:
+    build:
+      context: .
+      target: dev
+    container_name: aptely-api
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./src:/app/src          # hot-reload in dev
+      - ./nodemon.json:/app/nodemon.json
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+    command: npm run dev
+    restart: unless-stopped
+    networks:
+      - aptely-net
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+networks:
+  aptely-net:
+    driver: bridge

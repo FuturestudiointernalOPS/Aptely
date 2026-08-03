@@ -1,0 +1,9 @@
+{
+  "ts-node": {
+    "require": ["tsconfig-paths/register"]
+  },
+  "watch": ["src", ".env"],
+  "ext": "ts,json",
+  "ignore": ["src/**/*.spec.ts"],
+  "exec": "ts-node -r tsconfig-paths/register src/index.ts"
+}

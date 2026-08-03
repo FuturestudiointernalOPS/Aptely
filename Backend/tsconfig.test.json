@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // rootDir élargi à "." pour inclure tests/ (en dehors de src/)
+    "rootDir": ".",
+    // Pas besoin de générer des fichiers .d.ts pour les tests
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*", "tests/**/*"]
+}

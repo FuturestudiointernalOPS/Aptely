@@ -1,0 +1,957 @@
+openapi: "3.1.0"
+info:
+  title: Aptely API
+  description: |
+    REST API for Aptely — HR & Recruitment platform.
+    All authenticated routes require `Authorization: Bearer <jwt>`.
+    HR routes also require `X-Workspace-Id: <institution_id>`.
+    Locale via `x-locale: fr | en`.
+  version: "1.0.0"
+  contact:
+    email: contact@aptely.io
+
+servers:
+  - url: https://aptely.onrender.com
+    description: Production
+  - url: https://aptely-dev.onrender.com
+    description: Development
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        code: { type: string }
+    Pagination:
+      type: object
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+    Role:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        share_link: { type: string }
+        status: { type: string, enum: [DRAFT, ACTIVE, CLOSED, CANCELLED] }
+        created_at: { type: string, format: date-time }
+    Application:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, ANALYSING, FINISHED, VALIDATED, REJECTED, STOPPED] }
+        candidate_id: { type: string, format: uuid }
+        role_id: { type: string, format: uuid }
+        match_score: { type: number }
+        rejection_feedback_json: { type: array, items: { $ref: '#/components/schemas/RejectionDimension' } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RejectionDimension:
+      type: object
+      properties:
+        dimension: { type: string }
+        score: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+    Interview:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        application_id: { type: string, format: uuid }
+        status: { type: string, enum: [DRAFT, SCHEDULED, PENDING_CANDIDATE_BOOKING, COMPLETED, CANCELLED] }
+        scheduled_at: { type: string, format: date-time }
+        duration_minutes: { type: integer }
+        meeting_link: { type: string }
+    Offer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        application_id: { type: string, format: uuid }
+        status: { type: string, enum: [DRAFT, SENT, ACCEPTED, REJECTED, EXPIRED, COUNTER_OFFERED] }
+        salary_amount: { type: number }
+        salary_currency: { type: string }
+        start_date: { type: string, format: date }
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        title: { type: string }
+        body: { type: string }
+        link: { type: string }
+        is_read: { type: boolean }
+        created_at: { type: string, format: date-time }
+    EmployeeRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        employment_type: { type: string, enum: [CDI, CDD, FREELANCE, INTERNSHIP, PART_TIME] }
+        employment_status: { type: string, enum: [ACTIVE, ON_LEAVE, SUSPENDED, TERMINATED] }
+        start_date: { type: string, format: date }
+        salary_amount: { type: number }
+        salary_currency: { type: string }
+    Webhook:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        events: { type: array, items: { type: string } }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─── Auth ──────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                full_name: { type: string }
+      responses:
+        "201": { description: User created }
+        "409": { description: Email already exists }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: JWT token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user: { type: object }
+        "401": { description: Invalid credentials }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user profile
+      responses:
+        "200": { description: User object }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (clears cookie)
+      responses:
+        "200": { description: Logged out }
+
+  # ─── Roles (public) ────────────────────────────────────────────────────────
+  /roles/public/discover:
+    get:
+      tags: [Roles — Public]
+      summary: Discover active job offers (no auth)
+      security: []
+      parameters:
+        - { in: query, name: q, schema: { type: string }, description: Full-text search }
+        - { in: query, name: location, schema: { type: string } }
+        - { in: query, name: type, schema: { type: string, enum: [CDI, CDD, FREELANCE, INTERNSHIP, PART_TIME] } }
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+      responses:
+        "200":
+          description: Paginated role list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Role' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+
+  /roles/public/{shareLink}:
+    get:
+      tags: [Roles — Public]
+      summary: Get a public role by share link (apply page)
+      security: []
+      parameters:
+        - { in: path, name: shareLink, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Role with DNA }
+        "404": { description: Not found }
+
+  # ─── Roles (HR) ────────────────────────────────────────────────────────────
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List institution roles
+      parameters:
+        - { in: query, name: status, schema: { type: string } }
+        - { in: query, name: search, schema: { type: string } }
+      responses:
+        "200": { description: Role list }
+    post:
+      tags: [Roles]
+      summary: Create a role (DRAFT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                department_id: { type: string, format: uuid }
+      responses:
+        "201": { description: Created role }
+
+  /roles/{id}:
+    get:
+      tags: [Roles]
+      summary: Get role detail + DNA
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Role + DNA }
+    patch:
+      tags: [Roles]
+      summary: Update role metadata
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Roles]
+      summary: Delete role (cascade)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Deleted }
+
+  /roles/{id}/status:
+    patch:
+      tags: [Roles]
+      summary: Change role status
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [DRAFT, ACTIVE, CLOSED, CANCELLED] }
+      responses:
+        "200": { description: Updated }
+
+  # ─── Applications ──────────────────────────────────────────────────────────
+  /applications:
+    get:
+      tags: [Applications]
+      summary: List applications for institution
+      parameters:
+        - { in: query, name: roleId, schema: { type: string } }
+        - { in: query, name: status, schema: { type: string } }
+        - { in: query, name: page, schema: { type: integer } }
+      responses:
+        "200": { description: Application list }
+
+  /applications/{id}:
+    get:
+      tags: [Applications]
+      summary: Get application detail
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Application + candidate profile }
+
+  /applications/{id}/candidate:
+    get:
+      tags: [Applications]
+      summary: Get full candidate profile for application
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Candidate profile }
+
+  /applications/public/{roleShareLink}:
+    post:
+      tags: [Applications — Public]
+      summary: Submit application via share link (no auth)
+      security: []
+      parameters:
+        - { in: path, name: roleShareLink, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201": { description: Application submitted }
+
+  # ─── Interviews ────────────────────────────────────────────────────────────
+  /interviews:
+    get:
+      tags: [Interviews]
+      summary: List interviews for institution
+      responses:
+        "200": { description: Interview list }
+    post:
+      tags: [Interviews]
+      summary: Create interview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [application_id]
+              properties:
+                application_id: { type: string, format: uuid }
+                duration_minutes: { type: integer, default: 60 }
+      responses:
+        "201": { description: Created interview }
+
+  /interviews/{id}/propose-window:
+    post:
+      tags: [Interviews]
+      summary: HR proposes availability window — candidate books
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+                workingHoursStart: { type: string, example: "09:00" }
+                workingHoursEnd: { type: string, example: "18:00" }
+      responses:
+        "200": { description: booking_token returned }
+
+  /interviews/book/{token}/slots:
+    get:
+      tags: [Interviews — Public]
+      summary: Get available slots for candidate booking
+      security: []
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Available slots list }
+
+  /interviews/book/{token}:
+    post:
+      tags: [Interviews — Public]
+      summary: Candidate books a slot
+      security: []
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slot]
+              properties:
+                slot: { type: string, format: date-time }
+      responses:
+        "200": { description: Booked }
+
+  # ─── Decisions ─────────────────────────────────────────────────────────────
+  /decisions/applications/{id}/recommend:
+    post:
+      tags: [Decisions]
+      summary: Record recommendation
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [STRONG, MEDIUM, WEAK] }
+                reason: { type: string, maxLength: 2000 }
+      responses:
+        "201": { description: Recommendation recorded }
+
+  /decisions/applications/{id}/decide:
+    post:
+      tags: [Decisions]
+      summary: Make binding decision
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [ACCEPT, REJECT, HOLD] }
+                reason: { type: string, maxLength: 2000 }
+                rejection_feedback:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/RejectionDimension'
+      responses:
+        "201": { description: Decision recorded, application status updated }
+
+  /decisions/{id}/ratify:
+    post:
+      tags: [Decisions]
+      summary: Ratify a decision (HR head)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decisionId, action]
+              properties:
+                decisionId: { type: string, format: uuid }
+                action: { type: string, enum: [APPROVE, REQUEST_REVIEW] }
+      responses:
+        "200": { description: Ratified }
+
+  # ─── Offers ────────────────────────────────────────────────────────────────
+  /offers:
+    get:
+      tags: [Offers]
+      summary: List offers for institution
+      responses:
+        "200": { description: Offer list }
+    post:
+      tags: [Offers]
+      summary: Create offer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [application_id]
+              properties:
+                application_id: { type: string, format: uuid }
+                salary_amount: { type: number }
+                salary_currency: { type: string, default: EUR }
+                start_date: { type: string, format: date }
+      responses:
+        "201": { description: Created offer }
+
+  /offers/{id}:
+    get:
+      tags: [Offers]
+      summary: Get offer detail
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Offer }
+    patch:
+      tags: [Offers]
+      summary: Update offer (DRAFT only)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Updated }
+
+  /offers/{id}/signing-chain:
+    post:
+      tags: [Offers]
+      summary: Initiate e-signature chain
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "201": { description: Signing chain created }
+    get:
+      tags: [Offers]
+      summary: Get signing chain status
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Signing chain }
+
+  /offers/{id}/signed-pdf:
+    get:
+      tags: [Offers]
+      summary: Download signed PDF
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: PDF file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # ─── Notifications ─────────────────────────────────────────────────────────
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Get last 50 notifications (read + unread)
+      responses:
+        "200":
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+                  unread_count: { type: integer }
+
+  /notifications/read-all:
+    patch:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      responses:
+        "200": { description: Updated }
+
+  /notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark one notification as read
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Updated }
+
+  # ─── Employees ─────────────────────────────────────────────────────────────
+  /employees:
+    get:
+      tags: [Employees]
+      summary: List active employees
+      responses:
+        "200": { description: Employee list }
+    post:
+      tags: [Employees]
+      summary: Create employee record manually
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, start_date, employment_type]
+              properties:
+                user_id: { type: string, format: uuid }
+                start_date: { type: string, format: date }
+                employment_type: { type: string, enum: [CDI, CDD, FREELANCE, INTERNSHIP, PART_TIME] }
+                salary_amount: { type: number }
+      responses:
+        "201": { description: Created }
+
+  /employees/{userId}:
+    get:
+      tags: [Employees]
+      summary: Get employee record
+      parameters:
+        - { in: path, name: userId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Employee record }
+    patch:
+      tags: [Employees]
+      summary: Update employee record
+      parameters:
+        - { in: path, name: userId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Employees]
+      summary: Terminate employee (status → TERMINATED)
+      parameters:
+        - { in: path, name: userId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Terminated }
+
+  # ─── Leave ─────────────────────────────────────────────────────────────────
+  /leave/requests:
+    get:
+      tags: [Leave]
+      summary: List leave requests (filtered by role)
+      responses:
+        "200": { description: Leave requests }
+    post:
+      tags: [Leave]
+      summary: Submit leave request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_type, start_date, end_date]
+              properties:
+                leave_type: { type: string, enum: [VACATION, SICK, UNPAID, PARENTAL, OTHER] }
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date }
+                reason: { type: string }
+      responses:
+        "201": { description: Request submitted }
+
+  /leave/requests/{id}/approve:
+    patch:
+      tags: [Leave]
+      summary: Approve leave request
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Approved }
+
+  /leave/requests/{id}/reject:
+    patch:
+      tags: [Leave]
+      summary: Reject leave request
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Rejected }
+
+  /leave/balance/{userId}:
+    get:
+      tags: [Leave]
+      summary: Get leave balance (used/remaining)
+      parameters:
+        - { in: path, name: userId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Balance by type }
+
+  # ─── Payroll ───────────────────────────────────────────────────────────────
+  /payroll/periods:
+    get:
+      tags: [Payroll]
+      summary: List payroll periods
+      responses:
+        "200": { description: Periods list }
+    post:
+      tags: [Payroll]
+      summary: Create payroll period
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [period_month, period_year]
+              properties:
+                period_month: { type: integer, minimum: 1, maximum: 12 }
+                period_year: { type: integer }
+                notes: { type: string }
+      responses:
+        "201": { description: Created }
+
+  /payroll/periods/{periodId}:
+    get:
+      tags: [Payroll]
+      summary: Get period detail + entries
+      parameters:
+        - { in: path, name: periodId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Period + entries }
+    patch:
+      tags: [Payroll]
+      summary: Update period (status, notes)
+      parameters:
+        - { in: path, name: periodId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Payroll]
+      summary: Delete period (DRAFT only)
+      parameters:
+        - { in: path, name: periodId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Deleted }
+
+  /payroll/periods/{periodId}/generate:
+    post:
+      tags: [Payroll]
+      summary: Auto-generate entries from employee salaries
+      parameters:
+        - { in: path, name: periodId, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Entries generated }
+
+  # ─── Analytics ─────────────────────────────────────────────────────────────
+  /analytics/phase2/overview:
+    get:
+      tags: [Analytics]
+      summary: Recruitment overview KPIs
+      responses:
+        "200": { description: KPIs }
+
+  /analytics/hr/headcount:
+    get:
+      tags: [Analytics]
+      summary: HR headcount by department + monthly hires
+      responses:
+        "200": { description: Headcount data }
+
+  /analytics/hr/turnover:
+    get:
+      tags: [Analytics]
+      summary: Turnover rate + monthly terminations
+      responses:
+        "200": { description: Turnover data }
+
+  /analytics/hr/leave-stats:
+    get:
+      tags: [Analytics]
+      summary: Leave statistics for current year
+      responses:
+        "200": { description: Leave stats }
+
+  # ─── Institution ───────────────────────────────────────────────────────────
+  /institution/me:
+    get:
+      tags: [Institution]
+      summary: Get current institution + member info
+      responses:
+        "200": { description: Institution + membership }
+
+  /institution/me/permissions:
+    get:
+      tags: [Institution]
+      summary: Get effective permissions for current member
+      responses:
+        "200": { description: Permissions array }
+
+  /institution/members:
+    get:
+      tags: [Institution]
+      summary: List institution members
+      responses:
+        "200": { description: Members list }
+
+  /institution/members/{userId}/role:
+    patch:
+      tags: [Institution]
+      summary: Change member role (rank constraints apply)
+      parameters:
+        - { in: path, name: userId, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_specialization]
+              properties:
+                role_specialization: { type: string }
+      responses:
+        "200": { description: Updated }
+
+  /institution/custom-roles:
+    get:
+      tags: [Institution]
+      summary: List custom roles
+      responses:
+        "200": { description: Custom roles }
+    post:
+      tags: [Institution]
+      summary: Create custom role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, permissions]
+              properties:
+                name: { type: string }
+                permissions: { type: array, items: { type: string } }
+                rank: { type: integer, minimum: 1, maximum: 99, default: 15 }
+      responses:
+        "201": { description: Created }
+
+  /institution/transfer-ownership:
+    post:
+      tags: [Institution]
+      summary: Transfer ownership to another member (OWNER only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_owner_user_id]
+              properties:
+                new_owner_user_id: { type: string, format: uuid }
+      responses:
+        "200": { description: Transferred }
+
+  # ─── Webhooks ──────────────────────────────────────────────────────────────
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List institution webhooks
+      responses:
+        "200":
+          description: Webhook list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Webhook' } }
+    post:
+      tags: [Webhooks]
+      summary: Create webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url: { type: string, format: uri }
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - OFFER_ACCEPTED
+                      - OFFER_REJECTED
+                      - OFFER_SIGNED
+                      - INTERVIEW_SCHEDULED
+                      - INTERVIEW_COMPLETED
+                      - DECISION_ACCEPTED
+                      - DECISION_REJECTED
+                      - EMPLOYEE_HIRED
+                      - ONBOARDING_TASK_COMPLETED
+      responses:
+        "201": { description: Created, secret returned once }
+
+  /webhooks/{id}:
+    patch:
+      tags: [Webhooks]
+      summary: Update webhook (url, events, active)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, format: uri }
+                events: { type: array, items: { type: string } }
+                is_active: { type: boolean }
+      responses:
+        "200": { description: Updated }
+    delete:
+      tags: [Webhooks]
+      summary: Delete webhook
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Deleted }
+
+  /webhooks/{id}/rotate-secret:
+    post:
+      tags: [Webhooks]
+      summary: Rotate signing secret
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: New secret returned (shown once)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+
+  # ─── Individuals (Candidate portal) ────────────────────────────────────────
+  /individuals/me:
+    get:
+      tags: [Candidate Portal]
+      summary: Get own individual profile
+      responses:
+        "200": { description: Profile }
+    patch:
+      tags: [Candidate Portal]
+      summary: Update individual profile
+      responses:
+        "200": { description: Updated }
+
+  /individuals/me/applications:
+    get:
+      tags: [Candidate Portal]
+      summary: Get own applications
+      responses:
+        "200": { description: Applications with role + feedback }
+
+  /individuals/me/export:
+    post:
+      tags: [Candidate Portal]
+      summary: Generate shareable profile link
+      responses:
+        "200":
+          description: Share URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  share_url: { type: string }
+
+tags:
+  - { name: Auth, description: Authentication }
+  - { name: Roles — Public, description: Public job discovery (no auth) }
+  - { name: Roles, description: Role management (HR) }
+  - { name: Applications, description: Application lifecycle }
+  - { name: Applications — Public, description: Public application submission }
+  - { name: Interviews, description: Interview scheduling }
+  - { name: Interviews — Public, description: Candidate slot booking }
+  - { name: Decisions, description: Recommendation → Decision → Ratification }
+  - { name: Offers, description: Offer lifecycle + e-signature }
+  - { name: Notifications, description: In-app notifications }
+  - { name: Employees, description: Post-hire employee records }
+  - { name: Leave, description: Leave requests management }
+  - { name: Payroll, description: Payroll periods + entries }
+  - { name: Analytics, description: Recruitment + HR analytics }
+  - { name: Institution, description: Institution management + RBAC }
+  - { name: Webhooks, description: Outgoing webhooks }
+  - { name: Candidate Portal, description: Candidate-facing endpoints }
