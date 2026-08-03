@@ -1,0 +1,509 @@
+@import '@fontsource/outfit/300.css';
+@import '@fontsource/outfit/400.css';
+@import '@fontsource/outfit/500.css';
+@import '@fontsource/outfit/600.css';
+@import '@fontsource/outfit/700.css';
+@import '@fontsource/outfit/800.css';
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   APTELY "OBSIDIAN GLASS" DESIGN SYSTEM
+   Primary Orange: #FF6B00 | Deep Canvas: #0C0E1A → #111327
+   Fonts: Space Grotesk (display) + DM Sans (body)
+   ============================================================ */
+
+@layer base {
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  :root {
+    /* ─ Brand ─ */
+    --aptely-orange: oklch(62% 0.20 42);
+    --aptely-orange-soft: oklch(67% 0.18 42);
+    --aptely-orange-glow: oklch(62% 0.20 42 / 0.15);
+    --aptely-orange-glow-strong: oklch(62% 0.20 42 / 0.30);
+
+    /* ─ Surfaces (legacy) ─ */
+    --bg-deep: #0C0E1A;
+    --bg-canvas: #111327;
+    --bg-elevated: #161830;
+    --bg-sidebar: rgba(12, 14, 26, 0.85);
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-bg-subtle: rgba(255, 255, 255, 0.02);
+    --glass-bg-hover: rgba(255, 255, 255, 0.06);
+    --glass-bg-active: rgba(255, 255, 255, 0.08);
+    --glass-border: rgba(255, 255, 255, 0.07);
+    --glass-border-hover: rgba(255, 255, 255, 0.12);
+    --glass-border-active: rgba(255, 107, 0, 0.25);
+
+    /* ─ Text (legacy) ─ */
+    --text-primary: #F1F3F9;
+    --text-secondary: #8B92A8;
+    --text-muted: #5A6178;
+    --text-accent: #FF6B00;
+
+    /* ─ Status ─ */
+    --success: #34D399;
+    --success-bg: rgba(52, 211, 153, 0.1);
+    --warning: #FBBF24;
+    --warning-bg: rgba(251, 191, 36, 0.1);
+    --error-bg: rgba(248, 113, 113, 0.1);
+    --info: #60A5FA;
+    --info-bg: rgba(96, 165, 250, 0.1);
+
+    /* ─ Solid surface system (dark default) ─ */
+    --bg-deep:     oklch(14% 0.025 255);
+    --bg-surface:  oklch(18% 0.025 255);
+    --bg-raised:   oklch(22% 0.025 255);
+    --border:      oklch(28% 0.02 255);
+    --text-primary: oklch(94% 0.008 85);
+    --text-secondary: oklch(70% 0.01 255);
+    --text-muted:  oklch(64% 0.013 255);
+    --accent:      oklch(65% 0.22 42);
+    --accent-dim:  oklch(65% 0.22 42 / 15%);
+
+    /* ─ Elevation (dark) ─ */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.20);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.26);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.36);
+  }
+
+  .light {
+    /* ─ Brand ─ */
+    --aptely-orange: oklch(58% 0.20 42);
+    --aptely-orange-soft: oklch(63% 0.18 42);
+    --aptely-orange-glow: oklch(58% 0.20 42 / 0.10);
+    --aptely-orange-glow-strong: oklch(58% 0.20 42 / 0.15);
+
+    /* ─ Surfaces (legacy) ─ */
+    --bg-canvas: #FFFFFF;
+    --bg-elevated: #F9FAFB;
+    --bg-sidebar: rgba(255, 255, 255, 0.9);
+    --glass-bg: rgba(255, 255, 255, 0.6);
+    --glass-bg-subtle: rgba(255, 255, 255, 0.3);
+    --glass-bg-hover: rgba(255, 255, 255, 0.9);
+    --glass-bg-active: #FFFFFF;
+    --glass-border: rgba(0, 0, 0, 0.05);
+    --glass-border-hover: rgba(0, 0, 0, 0.1);
+    --glass-border-active: rgba(255, 107, 0, 0.3);
+
+    /* ─ Text (legacy) ─ */
+    --text-accent: #FF6B00;
+
+    /* ─ Status ─ */
+    --success: #059669;
+    --success-bg: rgba(16, 185, 129, 0.1);
+    --warning: #D97706;
+    --warning-bg: rgba(245, 158, 11, 0.1);
+    --error: #DC2626;
+    --error-bg: rgba(239, 68, 68, 0.1);
+    --info: #2563EB;
+    --info-bg: rgba(59, 130, 246, 0.1);
+
+    /* ─ Solid surface system (light) ─ */
+    --bg-deep:     oklch(97% 0.008 85);
+    --bg-surface:  oklch(100% 0 0);
+    --bg-raised:   oklch(94% 0.01 85);
+    --border:      oklch(88% 0.01 85);
+    --text-primary: oklch(15% 0.03 255);
+    --text-secondary: oklch(35% 0.02 255);
+    --text-muted:  oklch(45% 0.02 255);
+    --accent:      oklch(58% 0.22 42);
+    --accent-dim:  oklch(58% 0.22 42 / 12%);
+
+    /* ─ Elevation (light) ─ */
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+    --shadow-md: 0 4px 14px rgba(16, 24, 40, 0.08);
+    --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.12);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+  html.light { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+
+  /* ─ Landing pages: use same theme system as rest of app ─ */
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  /* ─ Scrollbar ─ */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  /* ─ Selection ─ */
+  ::selection {
+    background: rgba(255, 107, 0, 0.3);
+    color: #fff;
+  }
+
+  /* ─ Form inputs global ─ */
+  input, textarea, select {
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+
+  /* Dark dropdown options */
+  option {
+    background: #161830;
+    color: #F1F3F9;
+  }
+
+  /* Date/time inputs on dark theme */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.6);
+  }
+
+  /* ─ Keyboard focus ring (global, low specificity so components can override) ─ */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* ─ Respect reduced motion ─ */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+
+  /* ══════════════════════════════════════════════════════════
+     GLASS PANELS — the core of the Obsidian Glass system
+     ══════════════════════════════════════════════════════════ */
+
+  .glass-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+
+  .glass-panel-hover {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    transition: box-shadow 0.16s ease, border-color 0.16s ease;
+  }
+
+  .glass-panel-hover:hover {
+    border-color: color-mix(in oklch, var(--accent) 30%, var(--border));
+    box-shadow: var(--shadow-md);
+  }
+
+  .glass-panel-active {
+    background: var(--bg-raised);
+    border: 1px solid color-mix(in oklch, var(--accent) 40%, var(--border));
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Glass input */
+  .glass-input {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    padding: 10px 16px;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+    outline: none;
+  }
+
+  .glass-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .glass-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px oklch(65% 0.22 42 / 15%);
+    background: var(--bg-raised);
+  }
+
+  /* Glass button variants */
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 24px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 20px color-mix(in oklch, var(--accent) 30%, transparent);
+  }
+
+  .btn-primary:hover {
+    opacity: 0.9;
+    box-shadow: 0 6px 30px color-mix(in oklch, var(--accent) 40%, transparent);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-glass {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-weight: 600;
+    border-radius: 12px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: background-color 0.16s ease, border-color 0.16s ease;
+  }
+
+  .btn-glass:hover {
+    background: var(--bg-surface);
+    border-color: color-mix(in oklch, var(--accent) 30%, var(--border));
+  }
+
+  /* ─ Glow effects ─ */
+  .glow-orange {
+    box-shadow: 0 0 30px rgba(255, 107, 0, 0.15), 0 0 60px rgba(255, 107, 0, 0.05);
+  }
+
+  .glow-orange-strong {
+    box-shadow: 0 0 40px rgba(255, 107, 0, 0.25), 0 0 80px rgba(255, 107, 0, 0.1);
+  }
+
+  /* ─ Score ring for candidate reports ─ */
+  .score-ring {
+    stroke-dasharray: 220;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease;
+  }
+
+  /* ─ Glass table ─ */
+  .glass-table th {
+    color: var(--text-muted);
+    font-size: 0.625rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .glass-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .glass-table tbody tr {
+    transition: background 0.15s ease;
+  }
+
+  .glass-table tbody tr:hover {
+    background: var(--bg-raised);
+  }
+
+}
+
+@layer utilities {
+  .animate-fade-in-up {
+    animation: fadeInUp 0.5s ease both;
+  }
+
+  .delay-75 { animation-delay: 75ms; }
+  .delay-100 { animation-delay: 100ms; }
+  .delay-150 { animation-delay: 150ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+
+  .font-display {
+    font-family: 'Outfit', system-ui, sans-serif;
+  }
+
+  .font-body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+
+  .font-jakarta {
+    font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  }
+
+  .orange-glow {
+    filter: drop-shadow(0 0 20px rgba(255, 107, 0, 0.4));
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ─ Mobile: safe-area, touch targets, scroll-snap ─ */
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .touch-target { min-height: 44px; min-width: 44px; }
+  .snap-x-mandatory { scroll-snap-type: x mandatory; }
+  .snap-start { scroll-snap-align: start; }
+
+  /* ─ Elevation utilities (token-aware, light/dark) ─ */
+  .shadow-e1 { box-shadow: var(--shadow-sm); }
+  .shadow-e2 { box-shadow: var(--shadow-md); }
+  .shadow-e3 { box-shadow: var(--shadow-lg); }
+
+  /* Interactive card: subtle lift on hover (depth instead of heavy borders) */
+  .card-interactive {
+    transition: box-shadow 0.16s ease, border-color 0.16s ease;
+  }
+  .card-interactive:hover {
+    box-shadow: var(--shadow-md);
+    border-color: color-mix(in oklch, var(--accent) 30%, var(--border));
+  }
+
+  /* Tap feedback for touch targets */
+  .tap { transition: transform 0.12s ease, background-color 0.12s ease; }
+  .tap:active { transform: scale(0.97); }
+
+  /* ─ Type scale (consistent hierarchy) ─ */
+  .text-page-title {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 1.25rem;
+    line-height: 1.65rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .text-section-title {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+  }
+  .text-card-title {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 600;
+  }
+  .text-meta {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    color: var(--text-muted);
+  }
+}
+
+@media (min-width: 1024px) {
+  .text-page-title { font-size: 1.5rem; line-height: 1.9rem; }
+}
+
+/* ─ Keyframes ─ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+/* ─ Overlay / dialog / toast motion (auto-neutralized by reduced-motion guard) ─ */
+@keyframes overlayFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes drawerSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* ── Print styles: clean PDF without sidebar/topbar ── */
+@media print {
+  aside,
+  nav,
+  header,
+  [data-print-hide],
+  .print-hide {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+}

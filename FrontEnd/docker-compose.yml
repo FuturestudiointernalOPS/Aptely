@@ -1,0 +1,15 @@
+services:
+  hr-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    container_name: hr-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # URL called from the USER'S BROWSER — must be the public host address
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    restart: unless-stopped

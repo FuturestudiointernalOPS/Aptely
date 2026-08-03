@@ -1,0 +1,266 @@
+import { cookies, headers } from "next/headers";
+import { unstable_cache } from "next/cache";
+import type { Activity, DashboardStats, Role } from "./api";
+import { applyPath } from "@/lib/routes";
+
+export type RecentApplicationServerItem = {
+  applicationId: string;
+  candidateName: string;
+  roleTitle: string;
+  submittedAt: string;
+};
+
+export type InstitutionInterviewServerItem = {
+  id: string;
+  applicationId: string;
+  candidateName: string;
+  roleTitle: string;
+  status: string;
+  scheduledAt: string | null;
+  meetingLocation: string | null;
+};
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+// Base URL of the frontend app (used to build full share links server-side)
+// Must be set in .env: NEXT_PUBLIC_APP_URL=https://yourdomain.com
+// Falls back to using request headers, then the API URL.
+async function getAppOrigin(): Promise<string> {
+  const explicit = process.env.NEXT_PUBLIC_APP_URL;
+  if (explicit) return explicit.replace(/\/$/, "");
+
+  try {
+    const headersList = await headers();
+    const host = headersList.get("x-forwarded-host") || headersList.get("host");
+    const proto = headersList.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");
+    if (host) return `${proto}://${host}`;
+  } catch (e) {
+    // Ignore error if used outside of request context
+  }
+
+  // Fallback: derive from API URL by removing common "/api" suffix
+  if (API_URL) return API_URL.replace(/\/api\/?$/, "").replace(/\/$/, "");
+  return "";
+}
+
+type MeServerPayload = {
+  id?: string;
+  email?: string;
+  role?: string;
+  institutionId?: string | null;
+};
+
+async function serverApiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
+  if (!API_URL) {
+    return null;
+  }
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get("hr_access_token")?.value;
+
+  if (!token) {
+    return null;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    // Backend temporarily unavailable (e.g., ECONNREFUSED on localhost:4000)
+    // Return null so pages can fallback gracefully instead of crashing.
+    return null;
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const json = await response.json();
+  return (json?.data ?? json) as T;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function safeDateString(value: unknown): string {
+  const raw = asNonEmptyString(value);
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= 0) return "";
+  return raw;
+}
+
+function normalizeRoleFromApi(r: any, appOrigin: string): Role {
+  const metadataMissing = Boolean(r?.metadata_missing);
+
+  return {
+    roleId: r.id,
+    title: asNonEmptyString(r?.title) ?? "Role to complete",
+    description: asNonEmptyString(r?.description) ?? undefined,
+    status: r.status,
+    location: asNonEmptyString(r?.location) ?? null,
+    type: asNonEmptyString(r?.type) ?? "UNSPECIFIED",
+    createdAt: safeDateString(r?.created_at) || new Date().toISOString(),
+    endDate: safeDateString(r?.end_date),
+    applicationsCount: r.applicationsCount || 0,
+    metadataMissing,
+    shareLink: r.share_link
+      ? `${appOrigin}${applyPath(r.share_link)}`
+      : r.id
+        ? `${appOrigin}${applyPath(r.id)}`
+        : "",
+  };
+}
+
+export async function getDashboardStatsServer(): Promise<DashboardStats> {
+  const stats = await serverApiFetch<any>("/hr/dashboard/stats");
+  return {
+    totalRoles: stats?.totalRoles || 0,
+    totalApplications: stats?.totalApplications || 0,
+    pendingApplications: stats?.pendingApplications || 0,
+    analyzingApplications: stats?.analyzingApplications || 0,
+    validatedApplications: stats?.validatedApplications || 0,
+    rejectedApplications: stats?.rejectedApplications || 0,
+    activeHRMembers: stats?.activeHRMembers || 0,
+  };
+}
+
+export async function getMeServer(): Promise<MeServerPayload | null> {
+  const me = await serverApiFetch<MeServerPayload>("/auth/me");
+  return me;
+}
+
+export type MyPermissionsServer = {
+  permissions: string[];
+  roleSpecialization: string | null;
+};
+
+async function fetchPermissionsWithToken(
+  token: string
+): Promise<MyPermissionsServer> {
+  if (!API_URL) return { permissions: [], roleSpecialization: null };
+  try {
+    const response = await fetch(`${API_URL}/institution/me/permissions`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) return { permissions: [], roleSpecialization: null };
+    const wrapper = await response.json();
+    const res = wrapper?.data ?? wrapper;
+    return {
+      permissions: Array.isArray(res?.permissions) ? res.permissions : [],
+      roleSpecialization: res?.role_specialization ?? null,
+    };
+  } catch {
+    return { permissions: [], roleSpecialization: null };
+  }
+}
+
+const getCachedPermissions = unstable_cache(
+  fetchPermissionsWithToken,
+  ["my-permissions"],
+  { revalidate: 30 }
+);
+
+/** Caller's effective permissions in the active workspace (OWNER → all). */
+export async function getMyPermissionsServer(): Promise<MyPermissionsServer> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("hr_access_token")?.value;
+  if (!token) return { permissions: [], roleSpecialization: null };
+  return getCachedPermissions(token);
+}
+
+export async function getRecentRolesServer(limit = 5): Promise<Role[]> {
+  const roles = await serverApiFetch<any[]>(`/hr/dashboard/recent-roles?limit=${limit}`);
+  if (!Array.isArray(roles)) return [];
+
+  const appOrigin = await getAppOrigin();
+  return roles.map(r => normalizeRoleFromApi(r, appOrigin));
+}
+
+export async function getRecentActivityServer(): Promise<Activity[]> {
+  const activities = await serverApiFetch<any[]>("/hr/dashboard/recent-activity");
+  if (!Array.isArray(activities)) return [];
+
+  return activities.map((a: any, i: number) => ({
+    activityId: a.activityId || `act-${i}`,
+    type: a.type,
+    message: asNonEmptyString(a?.message) ?? "Activity",
+    createdAt: safeDateString(a?.createdAt ?? a?.created_at) || new Date().toISOString(),
+  }));
+}
+
+export async function getRecentApplicationsServer(limit = 5): Promise<RecentApplicationServerItem[]> {
+  const apps = await serverApiFetch<any[]>(`/hr/dashboard/recent-applications?limit=${limit}`);
+  if (!Array.isArray(apps)) return [];
+
+  return apps.map((app: any, index: number) => ({
+    applicationId: asNonEmptyString(app?.applicationId) ?? asNonEmptyString(app?.id) ?? `recent-app-${index}`,
+    candidateName: asNonEmptyString(app?.candidateName) ?? "Candidate",
+    roleTitle: asNonEmptyString(app?.roleTitle) ?? "Role",
+    submittedAt: safeDateString(app?.submittedAt ?? app?.submitted_at ?? app?.created_at) || new Date().toISOString(),
+  }));
+}
+
+export async function getRolesServer(): Promise<Role[]> {
+  const roles = await serverApiFetch<any[]>("/roles");
+  if (!Array.isArray(roles)) return [];
+
+  const appOrigin = await getAppOrigin();
+  return roles.map(r => normalizeRoleFromApi(r, appOrigin));
+}
+
+export async function getInstitutionInterviewsServer(limit = 5): Promise<InstitutionInterviewServerItem[]> {
+  const payload = await serverApiFetch<any>("/interviews/institution/list");
+  const rows = Array.isArray(payload?.interviews) ? payload.interviews : [];
+
+  return rows
+    .slice()
+    .sort((a: any, b: any) => {
+      const aTime = safeDateString(a?.scheduledAt ?? a?.scheduled_at) || "";
+      const bTime = safeDateString(b?.scheduledAt ?? b?.scheduled_at) || "";
+
+      if (!aTime && !bTime) return 0;
+      if (!aTime) return 1;
+      if (!bTime) return -1;
+
+      return new Date(aTime).getTime() - new Date(bTime).getTime();
+    })
+    .slice(0, Math.max(1, limit))
+    .map((row: any) => ({
+      id: asNonEmptyString(row?.id) ?? "",
+      applicationId: asNonEmptyString(row?.applicationId ?? row?.application_id) ?? "",
+      candidateName: asNonEmptyString(row?.candidateName ?? row?.candidate_name) ?? "Candidate",
+      roleTitle: asNonEmptyString(row?.roleTitle ?? row?.role_title) ?? "Role",
+      status: asNonEmptyString(row?.status) ?? "DRAFT",
+      scheduledAt: asNonEmptyString(row?.scheduledAt ?? row?.scheduled_at),
+      meetingLocation: asNonEmptyString(row?.meetingLocation ?? row?.meeting_location),
+    }));
+}
+
+export async function updateRoleStatusServer(roleId: string, status: "ACTIVE" | "CLOSED" | "CANCELLED") {
+  return serverApiFetch(`/roles/${roleId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function deleteRoleServer(roleId: string) {
+  return serverApiFetch(`/roles/${roleId}`, {
+    method: "DELETE",
+  });
+}

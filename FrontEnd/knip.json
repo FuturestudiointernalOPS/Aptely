@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "src/app/**/page.tsx",
+    "src/app/**/layout.tsx",
+    "src/app/**/route.ts",
+    "src/app/**/actions.ts",
+    "src/app/**/loading.tsx",
+    "src/app/**/error.tsx",
+    "src/app/**/not-found.tsx",
+    "src/lib/apiServer.ts",
+    "src/lib/api.ts",
+    "src/remotion/**/*.{ts,tsx}",
+    "src/components/**/*.{ts,tsx}"
+  ],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignoreDependencies": ["@tailwindcss/postcss", "postcss-load-config", "@vitest/coverage-v8", "@fontsource/outfit"],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "enumMembers": "off",
+    "duplicates": "off"
+  }
+}
