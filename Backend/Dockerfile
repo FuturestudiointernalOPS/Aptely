@@ -24,6 +24,8 @@ FROM deps AS builder
 WORKDIR /app
 
 COPY tsconfig.json ./
+COPY scripts ./scripts
+COPY knip.json ./knip.json
 COPY src ./src
 
 RUN npm run build && npx tsc-alias
