@@ -9,6 +9,7 @@ import {
   Search, Trash2, ChevronLeft, ChevronRight, Building2,
   X, Users, Briefcase, MapPin, Calendar,
 } from "lucide-react";
+import { getClientLocale, t } from "@/lib/i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,22 +52,24 @@ interface InstitutionDetail {
 // ─── Institution Detail Drawer ────────────────────────────────────────────────
 
 const ROLE_COLORS: Record<string, string> = {
-  OWNER:          "text-amber-400 bg-amber-400/10",
-  ADMIN:          "text-blue-400 bg-blue-400/10",
-  HR_LEAD:        "text-purple-400 bg-purple-400/10",
-  STANDARD_HR:    "text-purple-400/70 bg-purple-400/10",
-  HIRING_MANAGER: "text-teal-400 bg-teal-400/10",
-  RECRUITER:      "text-sky-400 bg-sky-400/10",
+  OWNER:          "text-[var(--warning)] bg-[var(--warning-bg)]",
+  ADMIN:          "text-[var(--info)] bg-[var(--info-bg)]",
+  HR_LEAD:        "text-[var(--accent)] bg-[var(--accent-dim)]",
+  STANDARD_HR:    "text-[var(--accent)] bg-[var(--accent-dim)]",
+  HIRING_MANAGER: "text-[var(--info)] bg-[var(--info-bg)]",
+  RECRUITER:      "text-[var(--info)] bg-[var(--info-bg)]",
 };
 
 const JOB_STATUS_COLORS: Record<string, string> = {
-  PUBLISHED: "text-green-400",
-  DRAFT:     "text-amber-400",
+  PUBLISHED: "text-[var(--success)]",
+  DRAFT:     "text-[var(--warning)]",
   CLOSED:    "text-[var(--text-muted)]",
   ARCHIVED:  "text-[var(--text-muted)]",
 };
 
 function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () => void }) {
+  const locale = getClientLocale();
+  const tr = (key: string, fallback: string) => t(locale, key, fallback);
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -86,7 +89,7 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
       <div className="fixed right-0 top-0 h-full w-full max-w-md bg-[var(--bg-surface)] border-l border-[var(--border)] z-50 overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] sticky top-0 bg-[var(--bg-surface)]">
-          <span className="font-semibold text-sm text-[var(--text-primary)]">Détail entreprise</span>
+          <span className="font-semibold text-sm text-[var(--text-primary)]">{tr("admin.institutions.drawerTitle", "Détail entreprise")}</span>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-[var(--bg-raised)] text-[var(--text-muted)] transition-colors">
             <X size={16} />
           </button>
@@ -97,7 +100,7 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
             <div className="w-6 h-6 border-2 border-[var(--border)] border-t-[var(--accent)] rounded-full animate-spin" />
           </div>
         ) : !detail ? (
-          <div className="p-6 text-sm text-[var(--text-muted)]">Impossible de charger.</div>
+          <div className="p-6 text-sm text-[var(--text-muted)]">{tr("admin.institutions.drawerLoadError", "Impossible de charger.")}</div>
         ) : (
           <div className="p-6 space-y-6">
             {/* Header */}
@@ -125,30 +128,30 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-[var(--bg-raised)] rounded-lg p-3 text-center">
                 <div className="text-xl font-semibold text-[var(--text-primary)]">{detail.members.length}</div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">Membres</div>
+                <div className="text-xs text-[var(--text-muted)] mt-0.5">{tr("admin.institutions.statMembers", "Membres")}</div>
               </div>
               <div className="bg-[var(--bg-raised)] rounded-lg p-3 text-center">
-                <div className="text-xl font-semibold text-green-400">{activeMembers}</div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">Actifs</div>
+                <div className="text-xl font-semibold text-[var(--success)]">{activeMembers}</div>
+                <div className="text-xs text-[var(--text-muted)] mt-0.5">{tr("admin.institutions.statActive", "Actifs")}</div>
               </div>
               <div className="bg-[var(--bg-raised)] rounded-lg p-3 text-center">
                 <div className="text-xl font-semibold text-[var(--accent)]">{openJobs}</div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">Postes ouverts</div>
+                <div className="text-xs text-[var(--text-muted)] mt-0.5">{tr("admin.institutions.statOpenJobs", "Postes ouverts")}</div>
               </div>
             </div>
 
             {/* Meta */}
             <div className="bg-[var(--bg-raised)] rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--text-muted)]">ID</span>
+                <span className="text-[var(--text-muted)]">{tr("admin.institutions.fieldId", "ID")}</span>
                 <span className="font-mono text-[var(--text-secondary)]">{detail.institution.id.slice(0, 16)}…</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--text-muted)]">Stage</span>
+                <span className="text-[var(--text-muted)]">{tr("admin.institutions.fieldStage", "Stage")}</span>
                 <span className="text-[var(--text-secondary)]">{detail.institution.stage ?? "—"}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--text-muted)]">Créée le</span>
+                <span className="text-[var(--text-muted)]">{tr("admin.institutions.fieldCreatedAt", "Créée le")}</span>
                 <span className="text-[var(--text-secondary)]">
                   {new Date(detail.institution.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
                 </span>
@@ -160,11 +163,11 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
               <div className="flex items-center gap-2 mb-2">
                 <Users size={13} className="text-[var(--text-muted)]" />
                 <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
-                  Équipe ({detail.members.length})
+                  {tr("admin.institutions.sectionTeam", "Équipe")} ({detail.members.length})
                 </span>
               </div>
               {detail.members.length === 0 ? (
-                <p className="text-xs text-[var(--text-muted)] italic">Aucun membre</p>
+                <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.institutions.noMembers", "Aucun membre")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {detail.members.slice(0, 10).map((m) => (
@@ -174,14 +177,14 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
                           {m.role_specialization}
                         </span>
                       </div>
-                      <span className={m.status === "ACTIVE" ? "text-green-400" : "text-red-400"}>
+                      <span className={m.status === "ACTIVE" ? "text-[var(--success)]" : "text-[var(--error)]"}>
                         {m.status}
                       </span>
                     </div>
                   ))}
                   {detail.members.length > 10 && (
                     <p className="text-xs text-[var(--text-muted)] text-center pt-1">
-                      +{detail.members.length - 10} membres supplémentaires
+                      +{detail.members.length - 10} {tr("admin.institutions.moreMembers", "membres supplémentaires")}
                     </p>
                   )}
                 </div>
@@ -193,11 +196,11 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase size={13} className="text-[var(--text-muted)]" />
                 <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
-                  Fiches de poste ({detail.jobPositions.length})
+                  {tr("admin.institutions.sectionJobPositions", "Fiches de poste")} ({detail.jobPositions.length})
                 </span>
               </div>
               {detail.jobPositions.length === 0 ? (
-                <p className="text-xs text-[var(--text-muted)] italic">Aucune fiche de poste</p>
+                <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.institutions.noJobPositions", "Aucune fiche de poste")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {detail.jobPositions.map((j) => (
@@ -222,6 +225,8 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminInstitutionsPage() {
+  const locale = getClientLocale();
+  const tr = (key: string, fallback: string) => t(locale, key, fallback);
   const [institutions, setInstitutions] = useState<InstitutionRow[]>([]);
   const [meta, setMeta]                 = useState({ total: 0, page: 1, limit: 20 });
   const [search, setSearch]             = useState("");
@@ -264,8 +269,8 @@ export default function AdminInstitutionsPage() {
   return (
     <div className="p-8">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-[var(--text-primary)]">Entreprises</h1>
-        <p className="text-sm text-[var(--text-muted)] mt-0.5">{meta.total.toLocaleString()} institutions au total</p>
+        <h1 className="text-xl font-semibold text-[var(--text-primary)]">{tr("admin.institutions.title", "Entreprises")}</h1>
+        <p className="text-sm text-[var(--text-muted)] mt-0.5">{meta.total.toLocaleString()} {tr("admin.institutions.totalInstitutions", "institutions au total")}</p>
       </div>
 
       {/* Search */}
@@ -275,7 +280,7 @@ export default function AdminInstitutionsPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Nom de l'entreprise..."
+            placeholder={tr("admin.institutions.searchPlaceholder", "Nom de l'entreprise...")}
             className="w-full pl-9 pr-3 py-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
           />
         </div>
@@ -283,7 +288,7 @@ export default function AdminInstitutionsPage() {
           type="submit"
           className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          Rechercher
+          {tr("admin.institutions.searchButton", "Rechercher")}
         </button>
       </form>
 
@@ -291,21 +296,21 @@ export default function AdminInstitutionsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)]">
-              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">Entreprise</th>
-              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">Secteur</th>
-              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">Localisation</th>
-              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">Inscrite le</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableName", "Entreprise")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableSector", "Secteur")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableLocation", "Localisation")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableCreatedAt", "Inscrite le")}</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">Chargement…</td></tr>
+              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.institutions.loading", "Chargement…")}</td></tr>
             ) : institutions.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-12">
                   <Building2 size={32} className="mx-auto mb-2 text-[var(--text-muted)] opacity-40" />
-                  <p className="text-sm text-[var(--text-muted)]">Aucune entreprise</p>
+                  <p className="text-sm text-[var(--text-muted)]">{tr("admin.institutions.empty", "Aucune entreprise")}</p>
                 </td>
               </tr>
             ) : institutions.map((inst) => {
@@ -330,8 +335,8 @@ export default function AdminInstitutionsPage() {
                       <button
                         onClick={() => setConfirmDelete(inst)}
                         disabled={isActing}
-                        title="Supprimer"
-                        className="p-1.5 rounded hover:bg-[var(--bg-raised)] text-[var(--text-muted)] hover:text-red-400 disabled:opacity-40 transition-colors"
+                        title={tr("admin.institutions.delete", "Supprimer")}
+                        className="p-1.5 rounded hover:bg-[var(--bg-raised)] text-[var(--text-muted)] hover:text-[var(--error)] disabled:opacity-40 transition-colors"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -346,7 +351,7 @@ export default function AdminInstitutionsPage() {
 
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm text-[var(--text-muted)]">
-          <span>Page {meta.page} / {totalPages}</span>
+          <span>{tr("admin.institutions.page", "Page")} {meta.page} / {totalPages}</span>
           <div className="flex gap-2">
             <button
               onClick={() => load(meta.page - 1)}
@@ -375,22 +380,22 @@ export default function AdminInstitutionsPage() {
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6 max-w-sm w-full">
-            <h2 className="font-semibold text-[var(--text-primary)] mb-2">Supprimer l&apos;entreprise ?</h2>
+            <h2 className="font-semibold text-[var(--text-primary)] mb-2">{tr("admin.institutions.deleteTitle", "Supprimer l'entreprise ?")}</h2>
             <p className="text-sm text-[var(--text-muted)] mb-5">
-              <strong className="text-[var(--text-primary)]">{confirmDelete.name}</strong> et toutes ses données (membres, fiches postes, candidatures) seront supprimées. Action irréversible.
+              <strong className="text-[var(--text-primary)]">{confirmDelete.name}</strong> {tr("admin.institutions.deleteMessage", "et toutes ses données (membres, fiches postes, candidatures) seront supprimées. Action irréversible.")}
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setConfirmDelete(null)}
                 className="px-4 py-2 text-sm border border-[var(--border)] rounded-lg hover:bg-[var(--bg-raised)] transition-colors text-[var(--text-secondary)]"
               >
-                Annuler
+                {tr("admin.institutions.cancel", "Annuler")}
               </button>
               <button
                 onClick={() => deleteInstitution(confirmDelete)}
-                className="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                className="px-4 py-2 text-sm bg-[var(--error)] text-white rounded-lg hover:opacity-90 transition-colors"
               >
-                Supprimer
+                {tr("admin.institutions.delete", "Supprimer")}
               </button>
             </div>
           </div>

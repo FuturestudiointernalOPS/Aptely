@@ -8,6 +8,7 @@ import {
   Briefcase, Activity, UserPlus, Send, CheckCircle2, ShieldAlert,
   Zap, ArrowUpRight, Clock, Target, RefreshCw, Layers,
 } from "lucide-react";
+import { getClientLocale, t } from "@/lib/i18n";
 
 interface TrendData { thisWeek: number; pct: number | null }
 interface Stats {
@@ -60,10 +61,12 @@ function AnimatedCounter({ value, duration = 800 }: { value: number; duration?: 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function TrendBadge({ pct, thisWeek }: { pct: number | null; thisWeek: number }) {
-  if (pct === null) return <span className="text-[11px] text-[var(--text-muted)]">+{thisWeek} cette sem.</span>;
+  const locale = getClientLocale();
+  const tr = (key: string, fallback: string) => t(locale, key, fallback);
+  if (pct === null) return <span className="text-[11px] text-[var(--text-muted)]">+{thisWeek} {tr("admin.dashboard.thisWeek", "cette sem.")}</span>;
   const up = pct >= 0;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${up ? "text-emerald-400 bg-emerald-400/10" : "text-rose-400 bg-rose-400/10"}`}>
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${up ? "text-[var(--success)] bg-[var(--success-bg)]" : "text-[var(--error)] bg-[var(--error-bg)]"}`}>
       {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
       {up ? "+" : ""}{pct}%
     </span>
@@ -108,10 +111,12 @@ function SkeletonCard() {
 // ─── MiniBar (kept from before) ───────────────────────────────────────────────
 
 function MiniBar({ data, label }: { data: WeekPoint[]; label: string }) {
+  const locale = getClientLocale();
+  const tr = (key: string, fallback: string) => t(locale, key, fallback);
   if (!data.length) return (
     <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5">
       <span className="text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-      <div className="h-20 flex items-center justify-center text-xs text-[var(--text-muted)] mt-3">Aucune donnée</div>
+      <div className="h-20 flex items-center justify-center text-xs text-[var(--text-muted)] mt-3">{tr("admin.dashboard.noData", "Aucune donnée")}</div>
     </div>
   );
   const max = Math.max(...data.map(d => d.count), 1);
@@ -122,7 +127,7 @@ function MiniBar({ data, label }: { data: WeekPoint[]; label: string }) {
     <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 hover:border-[var(--accent)]/20 transition-colors">
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-        <span className="text-[10px] text-[var(--text-muted)] font-medium">{total} total</span>
+        <span className="text-[10px] text-[var(--text-muted)] font-medium">{total} {tr("admin.dashboard.total", "total")}</span>
       </div>
       <Sparkline data={values} />
       <div className="flex items-end gap-1 h-16 mt-2">
@@ -157,7 +162,7 @@ function FunnelBar({ label, value, max, conv }: { label: string; value: number; 
       </div>
       <span className="text-sm font-bold text-[var(--text-primary)] w-12 text-right tabular-nums">{value.toLocaleString()}</span>
       <span className={`text-xs font-semibold w-12 text-right tabular-nums ${
-        convNum !== null && convNum >= 35 ? "text-emerald-400" : convNum !== null && convNum >= 15 ? "text-amber-400" : "text-[var(--text-muted)]"
+        convNum !== null && convNum >= 35 ? "text-[var(--success)]" : convNum !== null && convNum >= 15 ? "text-[var(--warning)]" : "text-[var(--text-muted)]"
       }`}>{conv ?? `${pct}%`}</span>
     </div>
   );
@@ -165,18 +170,39 @@ function FunnelBar({ label, value, max, conv }: { label: string; value: number; 
 
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
-const ACTIVITY_META: Record<string, { icon: React.ElementType; color: string; bg: string; label: string }> = {
-  signup:          { icon: UserPlus,      color: "text-blue-400",   bg: "bg-blue-400/10",   label: "Inscription" },
-  job_posted:      { icon: Briefcase,     color: "text-purple-400", bg: "bg-purple-400/10", label: "Fiche" },
-  application:     { icon: Send,          color: "text-amber-400",  bg: "bg-amber-400/10",  label: "Candidature" },
-  offer_accepted:  { icon: CheckCircle2,  color: "text-emerald-400", bg: "bg-emerald-400/10", label: "Embauche" },
+const ACTIVITY_META: Record<string, { icon: React.ElementType; color: string; bg: string; labelKey: string; label: string }> = {
+  signup:          { icon: UserPlus,      color: "text-[var(--info)]",    bg: "bg-[var(--info-bg)]",    labelKey: "admin.dashboard.activitySignup",        label: "Inscription" },
+  job_posted:      { icon: Briefcase,     color: "text-[var(--accent)]",  bg: "bg-[var(--accent-dim)]", labelKey: "admin.dashboard.activityJobPosted",     label: "Fiche" },
+  application:     { icon: Send,          color: "text-[var(--warning)]", bg: "bg-[var(--warning-bg)]", labelKey: "admin.dashboard.activityApplication",   label: "Candidature" },
+  offer_accepted:  { icon: CheckCircle2,  color: "text-[var(--success)]", bg: "bg-[var(--success-bg)]", labelKey: "admin.dashboard.activityOfferAccepted", label: "Embauche" },
 };
 const ACTIVITY_TYPES = Object.keys(ACTIVITY_META);
 
+// Pure formatter: takes the reference instant as an argument instead of reading
+// the clock during render (which React forbids).
+function formatRelativeTime(nowMs: number, atIso: string, locale: string): string {
+  const ts = new Date(atIso);
+  const diff = Math.floor((nowMs - ts.getTime()) / 60000);
+  if (diff < 60) return `${Math.max(0, diff)}m`;
+  if (diff < 1440) return `${Math.floor(diff / 60)}h`;
+  return ts.toLocaleDateString(locale === "en" ? "en-US" : "fr-FR", { day: "numeric", month: "short" });
+}
+
 function ActivityFeed({ events }: { events: ActivityEvent[] }) {
+  const locale = getClientLocale();
+  const tr = (key: string, fallback: string) => t(locale, key, fallback);
   const [filter, setFilter] = useState<string | null>(null);
+  // Reference instant for relative labels — captured after mount, never read
+  // during render, and refreshed every minute.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
   const filtered = useMemo(() => filter ? events.filter(e => e.type === filter) : events, [events, filter]);
-  if (!events.length) return <div className="text-center py-10 text-sm text-[var(--text-muted)]">Aucune activité récente</div>;
+  if (!events.length) return <div className="text-center py-10 text-sm text-[var(--text-muted)]">{tr("admin.dashboard.noActivity", "Aucune activité récente")}</div>;
 
   const counts: Record<string, number> = {};
   events.forEach(e => { counts[e.type] = (counts[e.type] || 0) + 1; });
@@ -187,7 +213,7 @@ function ActivityFeed({ events }: { events: ActivityEvent[] }) {
         <button onClick={() => setFilter(null)}
           className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
             filter === null ? "bg-[var(--accent)] text-white shadow-sm" : "bg-[var(--bg-raised)] text-[var(--text-muted)] hover:bg-[var(--bg-raised)]"}`}>
-          Tous <span className="opacity-60 ml-0.5">({events.length})</span>
+          {tr("admin.dashboard.all", "Tous")} <span className="opacity-60 ml-0.5">({events.length})</span>
         </button>
         {ACTIVITY_TYPES.map(type => {
           const meta = ACTIVITY_META[type];
@@ -197,20 +223,18 @@ function ActivityFeed({ events }: { events: ActivityEvent[] }) {
               className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 ${
                 filter === type ? "bg-[var(--accent)] text-white shadow-sm" : "bg-[var(--bg-raised)] text-[var(--text-muted)] hover:bg-[var(--bg-raised)]"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${meta.color.replace("text-", "bg-")}`} />
-              {meta.label} <span className="opacity-60">({c})</span>
+              {tr(meta.labelKey, meta.label)} <span className="opacity-60">({c})</span>
             </button>
           );
         })}
       </div>
       <div className="flex flex-col divide-y divide-[var(--border)]">
         {filtered.length === 0 ? (
-          <div className="text-center py-4 text-xs text-[var(--text-muted)]">Aucun événement pour ce filtre</div>
+          <div className="text-center py-4 text-xs text-[var(--text-muted)]">{tr("admin.dashboard.noFilteredEvents", "Aucun événement pour ce filtre")}</div>
         ) : filtered.slice(0, 20).map((e, i) => {
-          const meta = ACTIVITY_META[e.type] ?? { icon: Activity, color: "text-[var(--text-muted)]", bg: "bg-[var(--bg-raised)]", label: e.type };
+          const meta = ACTIVITY_META[e.type] ?? { icon: Activity, color: "text-[var(--text-muted)]", bg: "bg-[var(--bg-raised)]", labelKey: "", label: e.type };
           const Icon = meta.icon;
-          const ts = new Date(e.at);
-          const diff = Math.floor((Date.now() - ts.getTime()) / 60000);
-          const relTime = diff < 60 ? `${diff}m` : diff < 1440 ? `${Math.floor(diff / 60)}h` : ts.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+          const relTime = now === null ? "—" : formatRelativeTime(now, e.at, locale);
           return (
             <div key={i} className="flex items-center gap-3 py-3 group hover:bg-[var(--bg-raised)]/50 -mx-2 px-2 rounded-lg transition-colors">
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${meta.bg} ${meta.color}`}>
@@ -218,7 +242,7 @@ function ActivityFeed({ events }: { events: ActivityEvent[] }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-[var(--text-primary)] truncate font-medium">{e.label}</p>
-                <p className="text-[10px] text-[var(--text-muted)]">{meta.label}</p>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr(meta.labelKey, meta.label)}</p>
               </div>
               <span className="text-[10px] text-[var(--text-muted)] shrink-0 font-medium">{relTime}</span>
             </div>
@@ -237,9 +261,9 @@ function GaugeRing({ value, max, size = 56, strokeWidth = 5 }: { value: number; 
   const circ = 2 * Math.PI * r;
   const offset = circ - (pct / 100) * circ;
   let color = "var(--accent)";
-  if (pct >= 70) color = "#34d399";
-  else if (pct >= 40) color = "#fbbf24";
-  else if (pct > 0) color = "#f87171";
+  if (pct >= 70) color = "var(--success)";
+  else if (pct >= 40) color = "var(--warning)";
+  else if (pct > 0) color = "var(--error)";
   return (
     <svg width={size} height={size} className="shrink-0">
       <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--bg-raised)" strokeWidth={strokeWidth} />
@@ -259,13 +283,13 @@ function PMFMetric({ label, value, max, suffix = "", threshold, thresholdLabel }
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   const good = pct >= threshold;
   return (
-    <div className={`rounded-2xl border p-4 transition-all duration-300 ${good ? "border-emerald-400/20 bg-emerald-400/5" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
+    <div className={`rounded-2xl border p-4 transition-all duration-300 ${good ? "border-[var(--success)] bg-[var(--success-bg)]" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
       <div className="flex items-center gap-3">
         <GaugeRing value={value} max={max} />
         <div>
           <p className="text-lg font-bold text-[var(--text-primary)]">{value}{suffix}</p>
           <p className="text-xs text-[var(--text-muted)]">{label}</p>
-          <p className={`text-[10px] font-medium mt-0.5 ${good ? "text-emerald-400" : "text-[var(--text-muted)]"}`}>{thresholdLabel}</p>
+          <p className={`text-[10px] font-medium mt-0.5 ${good ? "text-[var(--success)]" : "text-[var(--text-muted)]"}`}>{thresholdLabel}</p>
         </div>
       </div>
     </div>
@@ -275,13 +299,15 @@ function PMFMetric({ label, value, max, suffix = "", threshold, thresholdLabel }
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type Tab = "overview" | "acquisition" | "retention";
-const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
-  { key: "overview",    label: "Vue d'ensemble",   icon: Layers },
-  { key: "acquisition", label: "Acquisition",      icon: TrendingUp },
-  { key: "retention",   label: "Rétention",        icon: RefreshCw },
+const TABS: { key: Tab; labelKey: string; label: string; icon: React.ElementType }[] = [
+  { key: "overview",    labelKey: "admin.dashboard.tabOverview",    label: "Vue d'ensemble", icon: Layers },
+  { key: "acquisition", labelKey: "admin.dashboard.tabAcquisition", label: "Acquisition",    icon: TrendingUp },
+  { key: "retention",   labelKey: "admin.dashboard.tabRetention",   label: "Rétention",      icon: RefreshCw },
 ];
 
 export default function AdminDashboard() {
+  const locale = getClientLocale();
+  const tr = (key: string, fallback: string) => t(locale, key, fallback);
   const [stats, setStats] = useState<Stats | null>(null);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
@@ -307,29 +333,29 @@ export default function AdminDashboard() {
     <div className="min-h-screen">
       {/* ── Header Banner ── */}
       <div className="relative overflow-hidden border-b border-[var(--border)] bg-[var(--bg-surface)]">
-        <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent)]/5 via-transparent to-purple-400/5 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent)]/5 via-transparent to-[var(--accent)]/5 pointer-events-none" />
         <div className="relative px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest font-bold mb-1">Admin</p>
+              <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest font-bold mb-1">{tr("admin.dashboard.headerAdmin", "Admin")}</p>
               <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Aptely</h1>
-              <p className="text-sm text-[var(--text-muted)] mt-1">Tableau de bord plateforme</p>
+              <p className="text-sm text-[var(--text-muted)] mt-1">{tr("admin.dashboard.subtitle", "Tableau de bord plateforme")}</p>
             </div>
             {!loadingM && (
               <div className="flex items-center gap-6">
                 <div className="text-center">
                   <p className="text-2xl font-bold text-[var(--accent)]">{metrics?.activeInstitutions30d ?? 0}</p>
-                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Entreprises actives</p>
+                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{tr("admin.dashboard.activeInstitutions", "Entreprises actives")}</p>
                 </div>
                 <div className="w-px h-10 bg-[var(--border)]" />
                 <div className="text-center">
                   <p className="text-2xl font-bold text-[var(--text-primary)]">{f?.accepted ?? 0}</p>
-                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Embauches</p>
+                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{tr("admin.dashboard.hires", "Embauches")}</p>
                 </div>
                 <div className="w-px h-10 bg-[var(--border)]" />
                 <div className="text-center">
                   <p className="text-2xl font-bold text-[var(--text-primary)]">{metrics?.repeatHiringInstitutions ?? 0}</p>
-                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Repeat hiring</p>
+                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{tr("admin.dashboard.repeatHiring", "Réembauche")}</p>
                 </div>
               </div>
             )}
@@ -348,7 +374,7 @@ export default function AdminDashboard() {
                   : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               }`}>
               <t.icon size={15} />
-              {t.label}
+              {tr(t.labelKey, t.label)}
             </button>
           ))}
         </div>
@@ -364,11 +390,11 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {loadingS ? Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />) : (
             <>
-              <StatCard label="Utilisateurs"    value={stats?.totalUsers ?? 0}        icon={Users}       accent="bg-blue-400/10 text-blue-400"    trend={stats?.trends.users} />
-              <StatCard label="Entreprises"     value={stats?.totalInstitutions ?? 0}  icon={Building2}    accent="bg-purple-400/10 text-purple-400" trend={stats?.trends.institutions} sub={`${metrics?.activeInstitutions30d ?? 0} actives`} />
-              <StatCard label="Candidatures"    value={stats?.totalApplications ?? 0}  icon={FileText}     accent="bg-amber-400/10 text-amber-400"   trend={stats?.trends.applications} />
-              <StatCard label="Fiches"          value={f?.jobPositions ?? 0}           icon={Briefcase}    accent="bg-emerald-400/10 text-emerald-400" />
-              <StatCard label="Super admins"    value={stats?.totalSuperAdmins ?? 0}   icon={ShieldAlert}  accent="bg-rose-400/10 text-rose-400" />
+              <StatCard label={tr("admin.dashboard.statUsers", "Utilisateurs")}    value={stats?.totalUsers ?? 0}        icon={Users}       accent="bg-[var(--info-bg)] text-[var(--info)]"       trend={stats?.trends.users} />
+              <StatCard label={tr("admin.dashboard.statInstitutions", "Entreprises")}     value={stats?.totalInstitutions ?? 0}  icon={Building2}    accent="bg-[var(--accent-dim)] text-[var(--accent)]" trend={stats?.trends.institutions} sub={`${metrics?.activeInstitutions30d ?? 0} ${tr("admin.dashboard.activeSuffix", "actives")}`} />
+              <StatCard label={tr("admin.dashboard.statApplications", "Candidatures")}    value={stats?.totalApplications ?? 0}  icon={FileText}     accent="bg-[var(--warning-bg)] text-[var(--warning)]"   trend={stats?.trends.applications} />
+              <StatCard label={tr("admin.dashboard.statJobPostings", "Fiches")}          value={f?.jobPositions ?? 0}           icon={Briefcase}    accent="bg-[var(--success-bg)] text-[var(--success)]" />
+              <StatCard label={tr("admin.dashboard.statSuperAdmins", "Super admins")}    value={stats?.totalSuperAdmins ?? 0}   icon={ShieldAlert}  accent="bg-[var(--error-bg)] text-[var(--error)]" />
             </>
           )}
         </div>
@@ -380,19 +406,19 @@ export default function AdminDashboard() {
               <Zap size={16} className="text-[var(--accent)]" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">Santé PMF</h3>
-              <p className="text-xs text-[var(--text-muted)]">Indicateurs clés de product-market fit</p>
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.pmfHealth", "Santé PMF")}</h3>
+              <p className="text-xs text-[var(--text-muted)]">{tr("admin.dashboard.pmfSubtitle", "Indicateurs clés de product-market fit")}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            {loadingM ? <div className="col-span-3 text-center py-8 text-sm text-[var(--text-muted)]">Chargement...</div> : (
+            {loadingM ? <div className="col-span-3 text-center py-8 text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
               <>
-                <PMFMetric label="Candidature → Offre" value={appToOffer ?? 0} max={100} suffix="%" threshold={35} thresholdLabel="seuil ≥ 35%" />
-                <PMFMetric label="Offre → Accepté" value={offerToAccept ?? 0} max={100} suffix="%" threshold={50} thresholdLabel="seuil ≥ 50%" />
-                <PMFMetric label="Repeat hiring" value={metrics?.repeatHiringInstitutions ?? 0} max={10} threshold={3} thresholdLabel="seuil ≥ 3 entreprises" />
-                <PMFMetric label="Temps moyen embauche" value={metrics?.avgTimeToHireDays !== null ? Math.max(0, 60 - (metrics?.avgTimeToHireDays ?? 0)) : 0} max={60} suffix="" threshold={39} thresholdLabel={`${metrics?.avgTimeToHireDays ?? "—"}j · seuil ≤ 21j`} />
-                <PMFMetric label="Rétention entreprises" value={metrics?.institutionRetentionPct ?? 0} max={100} suffix="%" threshold={70} thresholdLabel="seuil ≥ 70%" />
-                <PMFMetric label="Candidature → Entretien" value={appToInterview ?? 0} max={100} suffix="%" threshold={25} thresholdLabel="seuil ≥ 25%" />
+                <PMFMetric label={tr("admin.dashboard.appToOffer", "Candidature → Offre")} value={appToOffer ?? 0} max={100} suffix="%" threshold={35} thresholdLabel={tr("admin.dashboard.threshold35", "seuil ≥ 35%")} />
+                <PMFMetric label={tr("admin.dashboard.offerToAccepted", "Offre → Accepté")} value={offerToAccept ?? 0} max={100} suffix="%" threshold={50} thresholdLabel={tr("admin.dashboard.threshold50", "seuil ≥ 50%")} />
+                <PMFMetric label={tr("admin.dashboard.repeatHiring", "Réembauche")} value={metrics?.repeatHiringInstitutions ?? 0} max={10} threshold={3} thresholdLabel={tr("admin.dashboard.threshold3Institutions", "seuil ≥ 3 entreprises")} />
+                <PMFMetric label={tr("admin.dashboard.avgTimeToHire", "Temps moyen embauche")} value={metrics?.avgTimeToHireDays !== null ? Math.max(0, 60 - (metrics?.avgTimeToHireDays ?? 0)) : 0} max={60} suffix="" threshold={39} thresholdLabel={`${metrics?.avgTimeToHireDays ?? "—"}j · ${tr("admin.dashboard.threshold21Days", "seuil ≤ 21j")}`} />
+                <PMFMetric label={tr("admin.dashboard.institutionRetention", "Rétention entreprises")} value={metrics?.institutionRetentionPct ?? 0} max={100} suffix="%" threshold={70} thresholdLabel={tr("admin.dashboard.threshold70", "seuil ≥ 70%")} />
+                <PMFMetric label={tr("admin.dashboard.appToInterview", "Candidature → Entretien")} value={appToInterview ?? 0} max={100} suffix="%" threshold={25} thresholdLabel={tr("admin.dashboard.threshold25", "seuil ≥ 25%")} />
               </>
             )}
           </div>
@@ -406,20 +432,20 @@ export default function AdminDashboard() {
                 <Target size={16} className="text-[var(--accent)]" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Funnel de recrutement</h3>
-                <p className="text-[10px] text-[var(--text-muted)]">Conversion globale</p>
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.funnelTitle", "Funnel de recrutement")}</h3>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.funnelSubtitle", "Conversion globale")}</p>
               </div>
               <span className="ml-auto text-xs font-bold text-[var(--accent)]">
-                {f && f.jobPositions > 0 ? `${Math.round((f.accepted / f.jobPositions) * 100)}%` : "—"} end-to-end
+                {f && f.jobPositions > 0 ? `${Math.round((f.accepted / f.jobPositions) * 100)}%` : "—"} {tr("admin.dashboard.endToEnd", "de bout en bout")}
               </span>
             </div>
-            {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : (
+            {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
               <div className="flex flex-col gap-4">
-                <FunnelBar label="Fiches de poste" value={f?.jobPositions ?? 0} max={funnelMax} />
-                <FunnelBar label="Candidatures"    value={f?.applications ?? 0} max={funnelMax} conv={f && f.jobPositions > 0 ? `${Math.round((f.applications / f.jobPositions) * 100)}x` : undefined} />
-                <FunnelBar label="Entretiens"      value={f?.interviews ?? 0}   max={funnelMax} conv={f && f.applications > 0 ? `${Math.round((f.interviews / f.applications) * 100)}%` : undefined} />
-                <FunnelBar label="Offres"          value={f?.offers ?? 0}       max={funnelMax} conv={f && f.interviews > 0 ? `${Math.round((f.offers / f.interviews) * 100)}%` : undefined} />
-                <FunnelBar label="Embauches"       value={f?.accepted ?? 0}     max={funnelMax} conv={f && f.offers > 0 ? `${Math.round((f.accepted / f.offers) * 100)}%` : undefined} />
+                <FunnelBar label={tr("admin.dashboard.funnelJobPositions", "Fiches de poste")} value={f?.jobPositions ?? 0} max={funnelMax} />
+                <FunnelBar label={tr("admin.dashboard.funnelApplications", "Candidatures")}    value={f?.applications ?? 0} max={funnelMax} conv={f && f.jobPositions > 0 ? `${Math.round((f.applications / f.jobPositions) * 100)}x` : undefined} />
+                <FunnelBar label={tr("admin.dashboard.funnelInterviews", "Entretiens")}      value={f?.interviews ?? 0}   max={funnelMax} conv={f && f.applications > 0 ? `${Math.round((f.interviews / f.applications) * 100)}%` : undefined} />
+                <FunnelBar label={tr("admin.dashboard.funnelOffers", "Offres")}          value={f?.offers ?? 0}       max={funnelMax} conv={f && f.interviews > 0 ? `${Math.round((f.offers / f.interviews) * 100)}%` : undefined} />
+                <FunnelBar label={tr("admin.dashboard.hires", "Embauches")}       value={f?.accepted ?? 0}     max={funnelMax} conv={f && f.offers > 0 ? `${Math.round((f.accepted / f.offers) * 100)}%` : undefined} />
               </div>
             )}
           </div>
@@ -430,11 +456,11 @@ export default function AdminDashboard() {
                 <Activity size={16} className="text-[var(--accent)]" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Activité récente</h3>
-                <p className="text-[10px] text-[var(--text-muted)]">7 derniers jours</p>
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.recentActivity", "Activité récente")}</h3>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.last7Days", "7 derniers jours")}</p>
               </div>
             </div>
-            {loadingA ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : <ActivityFeed events={activity} />}
+            {loadingA ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : <ActivityFeed events={activity} />}
           </div>
         </div>
 
@@ -444,9 +470,9 @@ export default function AdminDashboard() {
             <div key={i} className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 animate-pulse h-44" />
           )) : (
             <>
-              <MiniBar data={metrics?.weeklyJobPostings ?? []}  label="Fiches / semaine" />
-              <MiniBar data={metrics?.weeklyApplications ?? []}  label="Candidatures / semaine" />
-              <MiniBar data={metrics?.weeklyNewUsers ?? []}      label="Inscriptions / semaine" />
+              <MiniBar data={metrics?.weeklyJobPostings ?? []}  label={tr("admin.dashboard.weeklyJobPostings", "Fiches / semaine")} />
+              <MiniBar data={metrics?.weeklyApplications ?? []}  label={tr("admin.dashboard.weeklyApplications", "Candidatures / semaine")} />
+              <MiniBar data={metrics?.weeklyNewUsers ?? []}      label={tr("admin.dashboard.weeklyNewUsers", "Inscriptions / semaine")} />
             </>
           )}
         </div>
@@ -459,30 +485,30 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-8 h-8 rounded-xl bg-blue-400/10 flex items-center justify-center">
-                <Users size={16} className="text-blue-400" />
+              <div className="w-8 h-8 rounded-xl bg-[var(--info-bg)] flex items-center justify-center">
+                <Users size={16} className="text-[var(--info)]" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Croissance utilisateurs</h3>
-                <p className="text-[10px] text-[var(--text-muted)]">Nouvelles inscriptions par semaine</p>
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.userGrowth", "Croissance utilisateurs")}</h3>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.newSignupsPerWeek", "Nouvelles inscriptions par semaine")}</p>
               </div>
             </div>
-            {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : (
+            {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
               <MiniBar data={metrics?.weeklyNewUsers ?? []} label="" />
             )}
           </div>
 
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-8 h-8 rounded-xl bg-purple-400/10 flex items-center justify-center">
-                <Building2 size={16} className="text-purple-400" />
+              <div className="w-8 h-8 rounded-xl bg-[var(--accent-dim)] flex items-center justify-center">
+                <Building2 size={16} className="text-[var(--accent)]" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">Acquisition entreprises</h3>
-                <p className="text-[10px] text-[var(--text-muted)]">Nouvelles fiches par semaine</p>
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.institutionAcquisition", "Acquisition entreprises")}</h3>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.newJobPostingsPerWeek", "Nouvelles fiches par semaine")}</p>
               </div>
             </div>
-            {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : (
+            {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
               <MiniBar data={metrics?.weeklyJobPostings ?? []} label="" />
             )}
           </div>
@@ -490,35 +516,35 @@ export default function AdminDashboard() {
 
         <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-400/10 flex items-center justify-center">
-              <ArrowUpRight size={16} className="text-emerald-400" />
+            <div className="w-8 h-8 rounded-xl bg-[var(--success-bg)] flex items-center justify-center">
+              <ArrowUpRight size={16} className="text-[var(--success)]" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">Activation — pipeline actuel</h3>
-              <p className="text-[10px] text-[var(--text-muted)]">Volume total sur la plateforme</p>
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.activationPipeline", "Activation — pipeline actuel")}</h3>
+              <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.totalVolume", "Volume total sur la plateforme")}</p>
             </div>
           </div>
-          {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : (
+          {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <div className="rounded-xl border border-[var(--border)] p-4 text-center">
                 <p className="text-2xl font-bold text-[var(--accent)]">{f?.jobPositions ?? 0}</p>
-                <p className="text-xs text-[var(--text-muted)] mt-1">Fiches de poste</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">{tr("admin.dashboard.funnelJobPositions", "Fiches de poste")}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] p-4 text-center">
                 <p className="text-2xl font-bold text-[var(--text-primary)]">{f?.applications ?? 0}</p>
-                <p className="text-xs text-[var(--text-muted)] mt-1">Candidatures</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">{tr("admin.dashboard.funnelApplications", "Candidatures")}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] p-4 text-center">
                 <p className="text-2xl font-bold text-[var(--text-primary)]">{f?.interviews ?? 0}</p>
-                <p className="text-xs text-[var(--text-muted)] mt-1">Entretiens</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">{tr("admin.dashboard.funnelInterviews", "Entretiens")}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] p-4 text-center">
                 <p className="text-2xl font-bold text-[var(--text-primary)]">{f?.offers ?? 0}</p>
-                <p className="text-xs text-[var(--text-muted)] mt-1">Offres</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">{tr("admin.dashboard.funnelOffers", "Offres")}</p>
               </div>
-              <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-4 text-center">
-                <p className="text-2xl font-bold text-emerald-400">{f?.accepted ?? 0}</p>
-                <p className="text-xs text-emerald-400/70 mt-1">Embauches</p>
+              <div className="rounded-xl border border-[var(--success)] bg-[var(--success-bg)] p-4 text-center">
+                <p className="text-2xl font-bold text-[var(--success)]">{f?.accepted ?? 0}</p>
+                <p className="text-xs text-[var(--success)] mt-1">{tr("admin.dashboard.hires", "Embauches")}</p>
               </div>
             </div>
           )}
@@ -532,54 +558,54 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-400/10 flex items-center justify-center">
-                <RefreshCw size={16} className="text-emerald-400" />
+              <div className="w-8 h-8 rounded-xl bg-[var(--success-bg)] flex items-center justify-center">
+                <RefreshCw size={16} className="text-[var(--success)]" />
               </div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">Rétention entreprises</h3>
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.institutionRetention", "Rétention entreprises")}</h3>
             </div>
-            {loadingM ? <div className="py-6 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : (
+            {loadingM ? <div className="py-6 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
               <div className="text-center py-4">
                 <GaugeRing value={metrics?.institutionRetentionPct ?? 0} max={100} size={80} strokeWidth={6} />
                 <p className="text-xs text-[var(--text-muted)] mt-3">
-                  {metrics?.institutionRetentionPct !== null && metrics?.institutionRetentionPct !== undefined ? `${metrics.institutionRetentionPct}%` : "—"} des entreprises actives le mois précédent le sont encore ce mois
+                  {metrics?.institutionRetentionPct !== null && metrics?.institutionRetentionPct !== undefined ? `${metrics.institutionRetentionPct}%` : "—"} {tr("admin.dashboard.retentionExplanation", "des entreprises actives le mois précédent le sont encore ce mois")}
                 </p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-1">Seuil PMF : ≥ 70%</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-1">{tr("admin.dashboard.pmfThreshold70", "Seuil PMF : ≥ 70%")}</p>
               </div>
             )}
           </div>
 
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-400/10 flex items-center justify-center">
-                <Target size={16} className="text-amber-400" />
+              <div className="w-8 h-8 rounded-xl bg-[var(--warning-bg)] flex items-center justify-center">
+                <Target size={16} className="text-[var(--warning)]" />
               </div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">Repeat hiring</h3>
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.repeatHiring", "Réembauche")}</h3>
             </div>
-            {loadingM ? <div className="py-6 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : (
+            {loadingM ? <div className="py-6 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
               <div className="text-center py-4">
-                <p className={`text-4xl font-bold ${(metrics?.repeatHiringInstitutions ?? 0) >= 3 ? "text-emerald-400" : (metrics?.repeatHiringInstitutions ?? 0) >= 1 ? "text-amber-400" : "text-[var(--text-primary)]"}`}>
+                <p className={`text-4xl font-bold ${(metrics?.repeatHiringInstitutions ?? 0) >= 3 ? "text-[var(--success)]" : (metrics?.repeatHiringInstitutions ?? 0) >= 1 ? "text-[var(--warning)]" : "text-[var(--text-primary)]"}`}>
                   {metrics?.repeatHiringInstitutions ?? 0}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-2">Entreprises avec ≥ 2 embauches</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-1">Seuil PMF : ≥ 3</p>
+                <p className="text-xs text-[var(--text-muted)] mt-2">{tr("admin.dashboard.institutionsWith2Hires", "Entreprises avec ≥ 2 embauches")}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-1">{tr("admin.dashboard.pmfThreshold3", "Seuil PMF : ≥ 3")}</p>
               </div>
             )}
           </div>
 
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-xl bg-blue-400/10 flex items-center justify-center">
-                <Clock size={16} className="text-blue-400" />
+              <div className="w-8 h-8 rounded-xl bg-[var(--info-bg)] flex items-center justify-center">
+                <Clock size={16} className="text-[var(--info)]" />
               </div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">Time-to-hire</h3>
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.timeToHire", "Délai d'embauche")}</h3>
             </div>
-            {loadingM ? <div className="py-6 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : (
+            {loadingM ? <div className="py-6 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
               <div className="text-center py-4">
-                <p className={`text-4xl font-bold ${metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined && metrics.avgTimeToHireDays <= 21 ? "text-emerald-400" : metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined && metrics.avgTimeToHireDays <= 42 ? "text-amber-400" : "text-[var(--text-primary)]"}`}>
+                <p className={`text-4xl font-bold ${metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined && metrics.avgTimeToHireDays <= 21 ? "text-[var(--success)]" : metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined && metrics.avgTimeToHireDays <= 42 ? "text-[var(--warning)]" : "text-[var(--text-primary)]"}`}>
                   {metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined ? `${metrics.avgTimeToHireDays}j` : "—"}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-2">Délai moyen candidature → embauche</p>
-                <p className="text-[10px] text-[var(--text-muted)] mt-1">Seuil PMF : ≤ 21j</p>
+                <p className="text-xs text-[var(--text-muted)] mt-2">{tr("admin.dashboard.avgApplicationToHire", "Délai moyen candidature → embauche")}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-1">{tr("admin.dashboard.pmfThreshold21", "Seuil PMF : ≤ 21j")}</p>
               </div>
             )}
           </div>
@@ -592,33 +618,33 @@ export default function AdminDashboard() {
               <BarChart3 size={16} className="text-[var(--accent)]" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">Pipeline global</h3>
-              <p className="text-[10px] text-[var(--text-muted)]">Taux de conversion entre étapes</p>
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">{tr("admin.dashboard.globalPipeline", "Pipeline global")}</h3>
+              <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.conversionBetweenSteps", "Taux de conversion entre étapes")}</p>
             </div>
           </div>
-          {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">Chargement...</div> : (
+          {loadingM ? <div className="py-10 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="rounded-xl border border-[var(--border)] p-3 text-center">
                 <p className="text-lg font-bold text-[var(--text-primary)]">{f && f.jobPositions > 0 ? `${Math.round((f.applications / f.jobPositions) * 100)}x` : "—"}</p>
-                <p className="text-[10px] text-[var(--text-muted)]">Candidatures / fiche</p>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.applicationsPerJob", "Candidatures / fiche")}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] p-3 text-center">
-                <p className={`text-lg font-bold ${(appToInterview ?? 0) >= 25 ? "text-emerald-400" : "text-[var(--text-primary)]"}`}>
+                <p className={`text-lg font-bold ${(appToInterview ?? 0) >= 25 ? "text-[var(--success)]" : "text-[var(--text-primary)]"}`}>
                   {f && f.applications > 0 ? `${Math.round((f.interviews / f.applications) * 100)}%` : "—"}
                 </p>
-                <p className="text-[10px] text-[var(--text-muted)]">Candidature → Entretien</p>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.appToInterview", "Candidature → Entretien")}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] p-3 text-center">
-                <p className={`text-lg font-bold ${(interviewToOffer ?? 0) >= 35 ? "text-emerald-400" : "text-[var(--text-primary)]"}`}>
+                <p className={`text-lg font-bold ${(interviewToOffer ?? 0) >= 35 ? "text-[var(--success)]" : "text-[var(--text-primary)]"}`}>
                   {f && f.interviews > 0 ? `${Math.round((f.offers / f.interviews) * 100)}%` : "—"}
                 </p>
-                <p className="text-[10px] text-[var(--text-muted)]">Entretien → Offre</p>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.interviewToOffer", "Entretien → Offre")}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] p-3 text-center">
-                <p className={`text-lg font-bold ${(offerToAccept ?? 0) >= 50 ? "text-emerald-400" : "text-[var(--text-primary)]"}`}>
+                <p className={`text-lg font-bold ${(offerToAccept ?? 0) >= 50 ? "text-[var(--success)]" : "text-[var(--text-primary)]"}`}>
                   {f && f.offers > 0 ? `${Math.round((f.accepted / f.offers) * 100)}%` : "—"}
                 </p>
-                <p className="text-[10px] text-[var(--text-muted)]">Offre → Embauche</p>
+                <p className="text-[10px] text-[var(--text-muted)]">{tr("admin.dashboard.offerToHire", "Offre → Embauche")}</p>
               </div>
             </div>
           )}

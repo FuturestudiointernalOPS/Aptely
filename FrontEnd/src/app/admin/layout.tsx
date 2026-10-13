@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/apiHelper";
 import { adminStatsApi, ROUTES } from "@/lib/routes";
-import { getClientLocale, t } from "@/lib/i18n";
+import { getClientLocale, localizePath, removeLocalePrefix, t } from "@/lib/i18n";
 import {
   LayoutDashboard,
   Users,
@@ -15,9 +15,9 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: ROUTES.admin.root,         label: "Vue d'ensemble", icon: LayoutDashboard },
-  { href: ROUTES.admin.users,        label: "Utilisateurs",   icon: Users },
-  { href: ROUTES.admin.institutions, label: "Entreprises",    icon: Building2 },
+  { href: ROUTES.admin.root,         labelKey: "admin.nav.overview",     labelFallback: "Vue d'ensemble", icon: LayoutDashboard },
+  { href: ROUTES.admin.users,        labelKey: "admin.nav.users",        labelFallback: "Utilisateurs",   icon: Users },
+  { href: ROUTES.admin.institutions, labelKey: "admin.nav.institutions", labelFallback: "Entreprises",    icon: Building2 },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -25,6 +25,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [checking, setChecking] = useState(true);
   const locale = getClientLocale();
+  const pathNoLocale = removeLocalePrefix(pathname);
 
   useEffect(() => {
     apiFetch(adminStatsApi).then((data) => {
@@ -56,16 +57,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <ShieldAlert size={18} className="text-[var(--accent)]" />
             <span className="font-semibold text-sm text-[var(--text-primary)]">Aptely Admin</span>
           </div>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">Platform Control</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">{t(locale, "admin.nav.subtitle", "Contrôle de la plateforme")}</p>
         </div>
 
         <nav className="flex-1 px-2 py-4 flex flex-col gap-1">
-          {navItems.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || (href !== ROUTES.admin.root && pathname?.startsWith(href));
+          {navItems.map(({ href, labelKey, labelFallback, icon: Icon }) => {
+            const active = pathNoLocale === href || (href !== ROUTES.admin.root && pathNoLocale.startsWith(href));
             return (
               <Link
                 key={href}
-                href={href}
+                href={localizePath(href, locale)}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                   active
                     ? "bg-[var(--accent-dim)] text-[var(--accent)] font-medium"
@@ -73,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 }`}
               >
                 <Icon size={16} />
-                {label}
+                {t(locale, labelKey, labelFallback)}
               </Link>
             );
           })}
@@ -81,7 +82,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <div className="px-2 py-3 border-t border-[var(--border)]">
           <Link
-            href={ROUTES.candidate.dashboard}
+            href={localizePath(ROUTES.candidate.dashboard, locale)}
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)] transition-colors"
           >
             <LogOut size={16} />

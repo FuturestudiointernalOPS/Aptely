@@ -9,6 +9,7 @@ import {
   Search, Ban, Trash2, CheckCircle, ChevronLeft, ChevronRight,
   X, User, Building2, Dna, FileText, Calendar,
 } from "lucide-react";
+import { getClientLocale, t } from "@/lib/i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ interface UserDetail {
 // ─── User Detail Drawer ───────────────────────────────────────────────────────
 
 function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const locale = getClientLocale();
+  const tr = (key: string, fallback: string) => t(locale, key, fallback);
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -51,15 +54,15 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
   }, [userId]);
 
   const statusColor = (s: string) => {
-    if (s === "ACTIVE")    return "text-green-400 bg-green-400/10";
-    if (s === "SUSPENDED") return "text-red-400 bg-red-400/10";
+    if (s === "ACTIVE")    return "text-[var(--success)] bg-[var(--success-bg)]";
+    if (s === "SUSPENDED") return "text-[var(--error)] bg-[var(--error-bg)]";
     return "text-[var(--text-muted)] bg-[var(--bg-raised)]";
   };
 
   const appStatusColor = (s: string) => {
-    if (s === "ACCEPTED")  return "text-green-400";
-    if (s === "REJECTED")  return "text-red-400";
-    if (s === "PENDING")   return "text-amber-400";
+    if (s === "ACCEPTED")  return "text-[var(--success)]";
+    if (s === "REJECTED")  return "text-[var(--error)]";
+    if (s === "PENDING")   return "text-[var(--warning)]";
     return "text-[var(--text-muted)]";
   };
 
@@ -73,7 +76,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
       {/* Drawer */}
       <div className="fixed right-0 top-0 h-full w-full max-w-md bg-[var(--bg-surface)] border-l border-[var(--border)] z-50 overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] sticky top-0 bg-[var(--bg-surface)]">
-          <span className="font-semibold text-sm text-[var(--text-primary)]">Détail utilisateur</span>
+          <span className="font-semibold text-sm text-[var(--text-primary)]">{tr("admin.users.drawerTitle", "Détail utilisateur")}</span>
           <button
             onClick={onClose}
             className="p-1.5 rounded hover:bg-[var(--bg-raised)] text-[var(--text-muted)] transition-colors"
@@ -87,7 +90,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
             <div className="w-6 h-6 border-2 border-[var(--border)] border-t-[var(--accent)] rounded-full animate-spin" />
           </div>
         ) : !detail ? (
-          <div className="p-6 text-sm text-[var(--text-muted)]">Impossible de charger l&apos;utilisateur.</div>
+          <div className="p-6 text-sm text-[var(--text-muted)]">{tr("admin.users.drawerLoadError", "Impossible de charger l'utilisateur.")}</div>
         ) : (
           <div className="p-6 space-y-6">
             {/* Profile header */}
@@ -107,8 +110,8 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                     detail.profile.role === "HR"
-                      ? "bg-blue-500/15 text-blue-400"
-                      : "bg-purple-500/15 text-purple-400"
+                      ? "bg-[var(--info-bg)] text-[var(--info)]"
+                      : "bg-[var(--accent-dim)] text-[var(--accent)]"
                   }`}>{detail.profile.role}</span>
                   {detail.profile.location && (
                     <span className="text-xs text-[var(--text-muted)]">{detail.profile.location}</span>
@@ -120,11 +123,11 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
             {/* Meta */}
             <div className="bg-[var(--bg-raised)] rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--text-muted)]">ID</span>
+                <span className="text-[var(--text-muted)]">{tr("admin.users.fieldId", "ID")}</span>
                 <span className="font-mono text-[var(--text-secondary)]">{detail.profile.id.slice(0, 16)}…</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--text-muted)]">Inscrit le</span>
+                <span className="text-[var(--text-muted)]">{tr("admin.users.fieldCreatedAt", "Inscrit le")}</span>
                 <span className="text-[var(--text-secondary)]">
                   {new Date(detail.profile.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
                 </span>
@@ -135,29 +138,29 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Building2 size={13} className="text-[var(--text-muted)]" />
-                <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">Institution</span>
+                <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">{tr("admin.users.sectionInstitution", "Institution")}</span>
               </div>
               {detail.membership ? (
                 <div className="bg-[var(--bg-raised)] rounded-lg p-3 space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">ID institution</span>
+                    <span className="text-[var(--text-muted)]">{tr("admin.users.fieldInstitutionId", "ID institution")}</span>
                     <span className="font-mono text-[var(--text-secondary)]">{detail.membership.institution_id.slice(0, 12)}…</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">Statut membre</span>
+                    <span className="text-[var(--text-muted)]">{tr("admin.users.fieldMemberStatus", "Statut membre")}</span>
                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${statusColor(detail.membership.status)}`}>
                       {detail.membership.status}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">Rejoint le</span>
+                    <span className="text-[var(--text-muted)]">{tr("admin.users.fieldJoinedAt", "Rejoint le")}</span>
                     <span className="text-[var(--text-secondary)]">
                       {new Date(detail.membership.joined_at).toLocaleDateString("fr-FR")}
                     </span>
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-[var(--text-muted)] italic">Aucune institution</p>
+                <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.users.noInstitution", "Aucune institution")}</p>
               )}
             </div>
 
@@ -165,12 +168,12 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Dna size={13} className="text-[var(--text-muted)]" />
-                <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">Talent DNA</span>
+                <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">{tr("admin.users.sectionTalentDna", "Talent DNA")}</span>
               </div>
               {detail.talentDna ? (
                 <div className="bg-[var(--bg-raised)] rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">Score complétion</span>
+                    <span className="text-[var(--text-muted)]">{tr("admin.users.fieldCompletionScore", "Score complétion")}</span>
                     <span className="text-[var(--text-primary)] font-medium">{detail.talentDna.completion_score}%</span>
                   </div>
                   <div className="w-full bg-[var(--border)] rounded-full h-1.5">
@@ -180,14 +183,14 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                     />
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">Mis à jour</span>
+                    <span className="text-[var(--text-muted)]">{tr("admin.users.fieldUpdatedAt", "Mis à jour")}</span>
                     <span className="text-[var(--text-secondary)]">
                       {new Date(detail.talentDna.updated_at).toLocaleDateString("fr-FR")}
                     </span>
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-[var(--text-muted)] italic">Pas de Talent DNA</p>
+                <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.users.noTalentDna", "Pas de Talent DNA")}</p>
               )}
             </div>
 
@@ -196,11 +199,11 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
               <div className="flex items-center gap-2 mb-2">
                 <FileText size={13} className="text-[var(--text-muted)]" />
                 <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
-                  Candidatures récentes ({detail.recentApplications.length})
+                  {tr("admin.users.sectionRecentApplications", "Candidatures récentes")} ({detail.recentApplications.length})
                 </span>
               </div>
               {detail.recentApplications.length === 0 ? (
-                <p className="text-xs text-[var(--text-muted)] italic">Aucune candidature</p>
+                <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.users.noApplications", "Aucune candidature")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {detail.recentApplications.map((a) => (
@@ -227,6 +230,8 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminUsersPage() {
+  const locale = getClientLocale();
+  const tr = (key: string, fallback: string) => t(locale, key, fallback);
   const [users, setUsers]             = useState<UserRow[]>([]);
   const [meta, setMeta]               = useState({ total: 0, page: 1, limit: 20 });
   const [search, setSearch]           = useState("");
@@ -281,8 +286,8 @@ export default function AdminUsersPage() {
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">Utilisateurs</h1>
-          <p className="text-sm text-[var(--text-muted)] mt-0.5">{meta.total.toLocaleString()} comptes au total</p>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)]">{tr("admin.users.title", "Utilisateurs")}</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-0.5">{meta.total.toLocaleString()} {tr("admin.users.totalAccounts", "comptes au total")}</p>
         </div>
       </div>
 
@@ -293,7 +298,7 @@ export default function AdminUsersPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Email ou nom..."
+            placeholder={tr("admin.users.searchPlaceholder", "Email ou nom...")}
             className="w-full pl-9 pr-3 py-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
           />
         </div>
@@ -301,7 +306,7 @@ export default function AdminUsersPage() {
           type="submit"
           className="px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          Rechercher
+          {tr("admin.users.searchButton", "Rechercher")}
         </button>
       </form>
 
@@ -310,18 +315,18 @@ export default function AdminUsersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)]">
-              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">Utilisateur</th>
-              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">Rôle</th>
-              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">Inscrit le</th>
-              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">Statut</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableUser", "Utilisateur")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableRole", "Rôle")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableCreatedAt", "Inscrit le")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableStatus", "Statut")}</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">Chargement…</td></tr>
+              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.users.loading", "Chargement…")}</td></tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">Aucun utilisateur</td></tr>
+              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.users.empty", "Aucun utilisateur")}</td></tr>
             ) : users.map((u) => {
               const isBanned = u.banned_until && u.banned_until !== "none";
               const isActing = actionId === u.id;
@@ -338,8 +343,8 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                       u.role === "HR"
-                        ? "bg-blue-500/15 text-blue-400"
-                        : "bg-purple-500/15 text-purple-400"
+                        ? "bg-[var(--info-bg)] text-[var(--info)]"
+                        : "bg-[var(--accent-dim)] text-[var(--accent)]"
                     }`}>
                       {u.role}
                     </span>
@@ -349,12 +354,12 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     {isBanned ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-red-400">
-                        <Ban size={11} /> Suspendu
+                      <span className="inline-flex items-center gap-1 text-xs text-[var(--error)]">
+                        <Ban size={11} /> {tr("admin.users.statusSuspended", "Suspendu")}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-xs text-green-400">
-                        <CheckCircle size={11} /> Actif
+                      <span className="inline-flex items-center gap-1 text-xs text-[var(--success)]">
+                        <CheckCircle size={11} /> {tr("admin.users.statusActive", "Actif")}
                       </span>
                     )}
                   </td>
@@ -363,16 +368,16 @@ export default function AdminUsersPage() {
                       <button
                         onClick={() => suspend(u)}
                         disabled={isActing}
-                        title={isBanned ? "Réactiver" : "Suspendre"}
+                        title={isBanned ? tr("admin.users.reactivate", "Réactiver") : tr("admin.users.suspend", "Suspendre")}
                         className="p-1.5 rounded hover:bg-[var(--bg-raised)] text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors"
                       >
-                        {isBanned ? <CheckCircle size={15} className="text-green-400" /> : <Ban size={15} />}
+                        {isBanned ? <CheckCircle size={15} className="text-[var(--success)]" /> : <Ban size={15} />}
                       </button>
                       <button
                         onClick={() => setConfirmDelete(u)}
                         disabled={isActing}
-                        title="Supprimer"
-                        className="p-1.5 rounded hover:bg-[var(--bg-raised)] text-[var(--text-muted)] hover:text-red-400 disabled:opacity-40 transition-colors"
+                        title={tr("admin.users.delete", "Supprimer")}
+                        className="p-1.5 rounded hover:bg-[var(--bg-raised)] text-[var(--text-muted)] hover:text-[var(--error)] disabled:opacity-40 transition-colors"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -388,7 +393,7 @@ export default function AdminUsersPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between text-sm text-[var(--text-muted)]">
-          <span>Page {meta.page} / {totalPages}</span>
+          <span>{tr("admin.users.page", "Page")} {meta.page} / {totalPages}</span>
           <div className="flex gap-2">
             <button
               onClick={() => load(meta.page - 1)}
@@ -417,22 +422,22 @@ export default function AdminUsersPage() {
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6 max-w-sm w-full">
-            <h2 className="font-semibold text-[var(--text-primary)] mb-2">Supprimer l&apos;utilisateur ?</h2>
+            <h2 className="font-semibold text-[var(--text-primary)] mb-2">{tr("admin.users.deleteTitle", "Supprimer l'utilisateur ?")}</h2>
             <p className="text-sm text-[var(--text-muted)] mb-5">
-              <strong className="text-[var(--text-primary)]">{confirmDelete.email}</strong> sera supprimé définitivement. Action irréversible.
+              <strong className="text-[var(--text-primary)]">{confirmDelete.email}</strong> {tr("admin.users.deleteMessage", "sera supprimé définitivement. Action irréversible.")}
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setConfirmDelete(null)}
                 className="px-4 py-2 text-sm border border-[var(--border)] rounded-lg hover:bg-[var(--bg-raised)] transition-colors text-[var(--text-secondary)]"
               >
-                Annuler
+                {tr("admin.users.cancel", "Annuler")}
               </button>
               <button
                 onClick={() => deleteUser(confirmDelete)}
-                className="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                className="px-4 py-2 text-sm bg-[var(--error)] text-white rounded-lg hover:opacity-90 transition-colors"
               >
-                Supprimer
+                {tr("admin.users.delete", "Supprimer")}
               </button>
             </div>
           </div>
