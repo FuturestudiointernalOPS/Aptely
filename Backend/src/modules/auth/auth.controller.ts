@@ -20,8 +20,27 @@ import { type AuthenticatedRequest } from "@/middleware/auth.middleware";
 
 const resend = new Resend(env.RESEND_API_KEY);
 
-function hashOtp(code: string): string {
-  return crypto.createHash("sha256").update(code).digest("hex");
+function hashOtp(code: string, salt: string): string {
+  return crypto.createHash("sha256").update(`${salt}:${code}`).digest("hex");
+}
+
+// Maximum wrong-code tries before a signup code is burned and must be re-requested.
+const MAX_OTP_ATTEMPTS = 3;
+
+// Anti-abuse throttling for repeated code requests, per email address.
+// Durable: based on the stored request history, so it survives restarts.
+const OTP_REQUEST_COOLDOWN_SECONDS = 60;
+const OTP_MAX_REQUESTS_PER_HOUR = 5;
+
+// Source of truth for platform-owner status. JWT claims can drift (e.g. a stale
+// `is_super_admin: false`), so we always confirm against the table.
+async function isSuperAdminUser(userId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from("super_admins")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data !== null;
 }
 
 async function syncUserClaims(
@@ -52,14 +71,49 @@ async function syncUserClaims(
 export const requestSignupOtp = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body as RequestOtpInput;
 
-  // Check no existing active account
+  // Opportunistic cleanup of stale codes (best-effort; never blocks the request).
+  const { error: purgeError } = await supabaseAdmin.rpc("purge_email_otps");
+  if (purgeError) {
+    console.warn(`[AUTH] OTP purge skipped: ${purgeError.message}`);
+  }
+
+  // Whether an account already exists is decided here but never revealed in the
+  // response: both cases take the same path and return the same message, so the
+  // endpoint cannot be used to enumerate registered addresses.
   const { data: existing } = await supabaseAdmin
     .from("profiles")
     .select("id")
     .eq("email", email)
     .maybeSingle();
+  const accountExists = Boolean(existing);
 
-  if (existing) throw new AppError(409, "An account with this email already exists");
+  // Throttle repeated requests for the same address. Uses the stored request
+  // history, so the cooldown and hourly cap hold across restarts and instances.
+  const { data: recentOtps, error: recentError } = await supabaseAdmin
+    .from("email_otps")
+    .select("created_at")
+    .eq("email", email)
+    .eq("purpose", "REGISTER")
+    .gte("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(OTP_MAX_REQUESTS_PER_HOUR);
+
+  if (recentError) {
+    console.error(`[AUTH] Failed to read recent OTPs for ${email}: ${recentError.message}`);
+    throw new AppError(500, "Failed to create OTP");
+  }
+
+  const recent = recentOtps ?? [];
+  const lastRequestAt = recent[0]?.created_at;
+  if (
+    lastRequestAt &&
+    Date.now() - new Date(lastRequestAt).getTime() < OTP_REQUEST_COOLDOWN_SECONDS * 1000
+  ) {
+    throw new AppError(429, "Please wait a moment before requesting a new verification code.");
+  }
+  if (recent.length >= OTP_MAX_REQUESTS_PER_HOUR) {
+    throw new AppError(429, "Too many verification codes requested. Please try again later.");
+  }
 
   // Invalidate any prior unused OTPs for this email
   const { error: invalidationError } = await supabaseAdmin
@@ -75,12 +129,16 @@ export const requestSignupOtp = asyncHandler(async (req: Request, res: Response)
     );
   }
 
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  // Cryptographically secure draw (not Math.random) — see point 2 of hardening.
+  const code = String(crypto.randomInt(100000, 1000000));
+  // Per-code salt: stored hash is SHA-256 of "<salt>:<code>".
+  const codeSalt = crypto.randomBytes(16).toString("hex");
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
 
   const { error } = await supabaseAdmin.from("email_otps").insert({
     email,
-    code_hash: hashOtp(code),
+    code_hash: hashOtp(code, codeSalt),
+    code_salt: codeSalt,
     purpose: "REGISTER",
     expires_at: expiresAt,
   });
@@ -90,23 +148,38 @@ export const requestSignupOtp = asyncHandler(async (req: Request, res: Response)
     throw new AppError(500, "Failed to create OTP");
   }
 
-  console.log(
-    `[AUTH] OTP generated for ${email}, hash=${hashOtp(code).substring(0, 12)}..., expires=${expiresAt}`
-  );
+  console.log(`[AUTH] OTP generated for ${email}, accountExists=${accountExists}, expires=${expiresAt}`);
 
-  const { error: resendError } = await resend.emails.send({
-    from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
-    to: email,
-    subject: "Your Aptely verification code",
-    html: `
+  // The email body differs (code vs. "you already have an account"), but the
+  // HTTP response below is identical in both cases. The difference is only
+  // visible to the owner of the mailbox, never to the caller.
+  const subject = accountExists ? "Your Aptely account" : "Your Aptely verification code";
+  const html = accountExists
+    ? `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px">
+        <h2 style="color:#f97316;margin-bottom:8px">You already have an Aptely account</h2>
+        <p style="color:#6b7280;margin-bottom:24px">Someone tried to sign up with this email address. If that was you, simply sign in — or reset your password if you've forgotten it.</p>
+        <p style="color:#9ca3af;font-size:12px;margin-top:24px">If this wasn't you, you can safely ignore this email.</p>
+      </div>
+    `
+    : `
       <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px">
         <h2 style="color:#f97316;margin-bottom:8px">Verify your email</h2>
         <p style="color:#6b7280;margin-bottom:24px">Enter this code to complete your Aptely signup. It expires in 10 minutes.</p>
         <div style="background:#f3f4f6;border-radius:12px;padding:24px;text-align:center;letter-spacing:0.3em;font-size:32px;font-weight:700;color:#111827">${code}</div>
         <p style="color:#9ca3af;font-size:12px;margin-top:24px">If you didn't request this, ignore this email.</p>
       </div>
-    `,
-    text: `Your Aptely verification code: ${code}\n\nExpires in 10 minutes.`,
+    `;
+  const text = accountExists
+    ? `Someone tried to sign up with this email address. You already have an Aptely account — sign in, or reset your password if you've forgotten it.`
+    : `Your Aptely verification code: ${code}\n\nExpires in 10 minutes.`;
+
+  const { error: resendError } = await resend.emails.send({
+    from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
+    to: email,
+    subject,
+    html,
+    text,
   });
 
   if (resendError) {
@@ -114,7 +187,8 @@ export const requestSignupOtp = asyncHandler(async (req: Request, res: Response)
     throw new AppError(500, `Failed to send verification email: ${resendError.message}`);
   }
 
-  res.status(200).json({ message: "Verification code sent" });
+  // Uniform response — reveals nothing about whether the address is registered.
+  res.status(200).json({ message: "If this address can be used, a verification code has been sent." });
 });
 
 // ─── POST /auth/register ──────────────────────────────────────────────────────
@@ -138,7 +212,7 @@ export const register = asyncHandler(async (req: Request, res: Response): Promis
 
     const { data: otpRecord, error: otpLookupError } = await supabaseAdmin
       .from("email_otps")
-      .select("id, code_hash, expires_at, used_at")
+      .select("id, code_hash, code_salt, expires_at, used_at, attempts")
       .eq("email", email)
       .eq("purpose", "REGISTER")
       .is("used_at", null)
@@ -161,17 +235,76 @@ export const register = asyncHandler(async (req: Request, res: Response): Promis
       console.warn(`[AUTH] OTP expired for ${email} (expired at ${otpRecord.expires_at})`);
       throw new AppError(400, "Verification code has expired");
     }
-    if (otpRecord.code_hash !== hashOtp(otp)) {
-      console.warn(
-        `[AUTH] OTP hash mismatch for ${email}: received="${hashOtp(otp)}" stored="${otpRecord.code_hash}" (first 12 chars)`
-      );
-      throw new AppError(400, "Incorrect verification code");
+
+    // Too many wrong tries already: the code is dead, force a new request.
+    if ((otpRecord.attempts ?? 0) >= MAX_OTP_ATTEMPTS) {
+      await supabaseAdmin
+        .from("email_otps")
+        .update({ used_at: new Date().toISOString() })
+        .eq("id", otpRecord.id)
+        .is("used_at", null);
+      console.warn(`[AUTH] OTP attempt limit reached for ${email}`);
+      throw new AppError(429, "Too many incorrect attempts. Please request a new verification code.");
     }
 
-    await supabaseAdmin
+    // Legacy codes predate per-code salts and can no longer be verified.
+    if (!otpRecord.code_salt) {
+      console.warn(`[AUTH] OTP record without salt for ${email}`);
+      throw new AppError(400, "Invalid or expired verification code");
+    }
+
+    // Constant-time comparison so response timing can't be used to guess the code.
+    const providedHash = hashOtp(otp, otpRecord.code_salt);
+    const storedHash = otpRecord.code_hash;
+    const codeMatches =
+      storedHash.length === providedHash.length &&
+      crypto.timingSafeEqual(Buffer.from(storedHash, "utf8"), Buffer.from(providedHash, "utf8"));
+
+    if (!codeMatches) {
+      // Atomic increment + lock in the database: a single statement serialized by
+      // the row lock, so concurrent wrong guesses cannot lose an attempt.
+      const { data: newAttempts, error: attemptError } = await supabaseAdmin.rpc(
+        "record_otp_failed_attempt",
+        { p_otp_id: otpRecord.id, p_max_attempts: MAX_OTP_ATTEMPTS }
+      );
+
+      if (attemptError) {
+        console.error(
+          `[AUTH] Failed to record OTP attempt for ${email}: ${attemptError.message}`
+        );
+        throw new AppError(500, "Failed to verify code. Please try again.");
+      }
+
+      // No row updated means the code was already consumed/locked concurrently.
+      const attempts = typeof newAttempts === "number" ? newAttempts : MAX_OTP_ATTEMPTS;
+      const remaining = MAX_OTP_ATTEMPTS - attempts;
+
+      console.warn(
+        `[AUTH] OTP hash mismatch for ${email} (attempt ${attempts}/${MAX_OTP_ATTEMPTS})`
+      );
+
+      if (remaining <= 0) {
+        throw new AppError(429, "Too many incorrect attempts. Please request a new verification code.");
+      }
+      throw new AppError(
+        400,
+        `Incorrect verification code. ${remaining} attempt${remaining > 1 ? "s" : ""} remaining.`
+      );
+    }
+
+    // Consume the code atomically: only one request can win, so a consumed code
+    // can never be replayed (a second concurrent submit is rejected).
+    const { data: consumed, error: consumeError } = await supabaseAdmin
       .from("email_otps")
       .update({ used_at: new Date().toISOString() })
-      .eq("id", otpRecord.id);
+      .eq("id", otpRecord.id)
+      .is("used_at", null)
+      .select("id");
+
+    if (consumeError || !consumed || consumed.length === 0) {
+      console.warn(`[AUTH] OTP already consumed for ${email}`);
+      throw new AppError(400, "Invalid or expired verification code");
+    }
   }
 
   // 1. Create auth user (trigger auto-creates profile row).
@@ -319,9 +452,10 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
       throw new AppError(500, "Failed to load user profile");
     }
 
+    const superAdmin = await isSuperAdminUser(data.user.id);
     await syncUserClaims(data.user.id, {
       institutionId: newProfile.institution_id,
-      isSuperAdmin: false,
+      isSuperAdmin: superAdmin,
     });
 
     const { data: refreshedSessionData } = await createUserClient().auth.refreshSession({
@@ -339,6 +473,7 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
         fullName: newProfile.full_name,
         institutionId: newProfile.institution_id ?? null,
         avatarUrl: newProfile.avatar_url ?? null,
+        isSuperAdmin: superAdmin,
       },
       session: {
         accessToken,
@@ -362,10 +497,11 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
     activeInstitutionId = memberships?.[0]?.institution_id ?? null;
   }
 
+  const superAdmin = await isSuperAdminUser(data.user.id);
   await syncUserClaims(data.user.id, {
     institutionId: profile.institution_id,
     activeInstitutionId,
-    isSuperAdmin: false,
+    isSuperAdmin: superAdmin,
   });
 
   const { data: refreshedSessionData } = await createUserClient().auth.refreshSession({
@@ -385,6 +521,7 @@ export const login = asyncHandler(async (req: Request, res: Response): Promise<v
       activeInstitutionId,
       avatarUrl: profile.avatar_url ?? null,
       profileRole: (profile as { role?: string | null }).role ?? null,
+      isSuperAdmin: superAdmin,
     },
     session: {
       accessToken,
@@ -615,12 +752,15 @@ export const getMe = asyncHandler(
     }
 
     // Only sync claims when they differ from the JWT to avoid write on every request
-    const claimsMatch = (req.user?.institutionId ?? null) === (profile.institution_id ?? null);
+    const superAdmin = await isSuperAdminUser(userId);
+    const claimsMatch =
+      (req.user?.institutionId ?? null) === (profile.institution_id ?? null) &&
+      superAdmin === (req.user?.isSuperAdmin ?? false);
 
     if (!claimsMatch) {
       await syncUserClaims(userId, {
         institutionId: profile.institution_id,
-        isSuperAdmin: req.user?.isSuperAdmin,
+        isSuperAdmin: superAdmin,
       });
     }
 
@@ -633,6 +773,7 @@ export const getMe = asyncHandler(
       institutionId: effectiveInstitutionId,
       avatarUrl: profile.avatar_url ?? null,
       pendingJoinRequest,
+      isSuperAdmin: superAdmin,
     });
   }
 );
