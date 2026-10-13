@@ -42,6 +42,7 @@ import {
     Briefcase,
     FileSearch,
     Calendar,
+    ShieldAlert,
 } from "lucide-react";
 import { ROUTES } from "@/lib/routes";
 
@@ -516,6 +517,21 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
                             </button>
                         ))}
                     </div>
+                )}
+
+                {/* Platform administration — only for platform owners */}
+                {user?.isSuperAdmin && (
+                    <Link
+                        href={localizePath(ROUTES.admin.root, currentLocale)}
+                        className={`
+                            w-full flex items-center gap-2.5 rounded-lg transition-colors duration-150
+                            text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-dim)]
+                            ${isCollapsed ? 'justify-center p-2' : 'px-3 py-2 min-h-[44px] lg:min-h-0'}
+                        `}
+                    >
+                        <ShieldAlert size={17} className="flex-shrink-0" />
+                        {!isCollapsed && <span className="text-sm font-medium whitespace-nowrap">{translate("admin.nav.entry", "Administration")}</span>}
+                    </Link>
                 )}
 
                 <button

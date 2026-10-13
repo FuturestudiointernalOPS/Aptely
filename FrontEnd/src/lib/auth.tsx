@@ -19,6 +19,8 @@ interface AuthUser {
     institutionId?: string | null;
     avatarUrl?: string | null;
     fullName?: string | null;
+    /** Platform owner — unlocks the administration area. */
+    isSuperAdmin?: boolean;
 }
 
 interface AuthContextValue {
@@ -137,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         institutionId: resolvedData.institutionId ?? null,
                         avatarUrl: resolvedData.avatarUrl ?? null,
                         fullName: resolvedData.fullName ?? null,
+                        isSuperAdmin: Boolean(resolvedData.isSuperAdmin),
                     });
                     if (resolvedData.institutionId) {
                         localStorage.setItem("user_institutionId", resolvedData.institutionId);
@@ -228,7 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             // Keep token in memory state for Supabase real-time subscriptions (messages pages).
             // It is NOT persisted to a readable cookie — httpOnly cookie is the canonical store.
-            setUser({ email, token, userId, institutionId, fullName: data.user?.fullName ?? null, avatarUrl: data.user?.avatarUrl ?? null });
+            setUser({ email, token, userId, institutionId, fullName: data.user?.fullName ?? null, avatarUrl: data.user?.avatarUrl ?? null, isSuperAdmin: Boolean(data.user?.isSuperAdmin) });
 
             if (expiresAt) scheduleTokenRefresh(expiresAt);
             return { success: true, institutionId, activeInstitutionId, profileRole };

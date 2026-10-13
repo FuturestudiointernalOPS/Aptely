@@ -7,7 +7,7 @@ import TopBar from "@/components/TopBar";
 import BottomTabBar from "@/components/BottomTabBar";
 import LocaleThemeBar from "@/components/LocaleThemeBar";
 import { useState, useEffect } from "react";
-import { getClientLocale, t } from "@/lib/i18n";
+import { getClientLocale, removeLocalePrefix, t } from "@/lib/i18n";
 import {
   ROUTES,
   offerPublicPrefix,
@@ -81,14 +81,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setIsMobileOpen(false);
   }, [pathname]);
 
-  // Check if current route is public (or deep public like /apply/[link])
+  // Check if current route is public (or deep public like /apply/[link]).
+  // Compare against the locale-stripped path so it works whether or not the
+  // current pathname still carries the /fr|/en prefix.
+  const pathNoLocale = removeLocalePrefix(pathname);
   const isPublicRoute =
-    PUBLIC_SHELL_ROUTES.some((r) => pathname?.startsWith(r)) ||
-    pathname === "/" ||
-    pathname?.startsWith("/apply/");
+    PUBLIC_SHELL_ROUTES.some((r) => pathNoLocale.startsWith(r)) ||
+    pathNoLocale === "/" ||
+    pathNoLocale.startsWith("/apply/");
 
   // Hide floating locale/theme bar on landing page (default hidden until we know pathname)
-  const isLanding = !mounted || pathname === "/" || pathname === "/fr" || pathname === "/en";
+  const isLanding = !mounted || pathNoLocale === "/";
 
   if (loading) {
     return (
