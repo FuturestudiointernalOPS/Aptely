@@ -64,6 +64,14 @@ export default function JitsiEmbed({ meetingUrl, displayName, onClose }: JitsiEm
     apiRef.current.addEventListener("videoConferenceLeft", onClose);
   }, [roomName, displayName, onClose]);
 
+  const disposeJitsi = useCallback(() => {
+    disposedRef.current = true;
+    if (apiRef.current) {
+      try { apiRef.current.dispose(); } catch { /* ignore */ }
+      apiRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     disposedRef.current = false;
     
@@ -96,15 +104,7 @@ export default function JitsiEmbed({ meetingUrl, displayName, onClose }: JitsiEm
     return () => {
       disposeJitsi();
     };
-  }, [initJitsi]);
-
-  const disposeJitsi = () => {
-    disposedRef.current = true;
-    if (apiRef.current) {
-      try { apiRef.current.dispose(); } catch { /* ignore */ }
-      apiRef.current = null;
-    }
-  };
+  }, [initJitsi, disposeJitsi]);
 
   const handleClose = () => {
     disposeJitsi();
