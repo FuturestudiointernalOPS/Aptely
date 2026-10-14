@@ -1,0 +1,65 @@
+name: CI
+
+# "Before integration" gate: runs on every pull request and on pushes to main.
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (API)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run type-check
+      - name: Dead-code check
+        run: npm run dead-code
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  frontend:
+    name: FrontEnd (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FrontEnd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: FrontEnd/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run type-check
+      - name: i18n sync check
+        run: npm run i18n:check
+      - name: Dead-code check
+        run: npm run dead-code
+      - name: Unit tests
+        run: npm test

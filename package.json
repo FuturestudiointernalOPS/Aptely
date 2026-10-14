@@ -1,0 +1,12 @@
+{
+  "name": "aptely",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aptely — monorepo root (Backend API + FrontEnd). Orchestrates quality checks for CI and git hooks.",
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
+    "check:backend": "npm --prefix Backend run lint && npm --prefix Backend run type-check && npm --prefix Backend run dead-code && npm --prefix Backend test",
+    "check:frontend": "npm --prefix FrontEnd run lint && npm --prefix FrontEnd run type-check && npm --prefix FrontEnd run i18n:check && npm --prefix FrontEnd run dead-code && npm --prefix FrontEnd test",
+    "check": "npm run check:backend && npm run check:frontend"
+  }
+}

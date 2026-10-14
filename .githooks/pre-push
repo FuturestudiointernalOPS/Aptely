@@ -1,0 +1,29 @@
+#!/bin/sh
+# Aptely — "before delivery" gate.
+# Runs the same quality checks as CI locally, right before a push, so broken
+# code never leaves the machine. Install once with:
+#   git config core.hooksPath .githooks
+set -e
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+if [ ! -d "Backend/node_modules" ] || [ ! -d "FrontEnd/node_modules" ]; then
+  echo "⚠️  [pre-push] Dependencies are missing. Run: (cd Backend && npm ci) && (cd FrontEnd && npm ci)"
+  exit 1
+fi
+
+echo "▶ [pre-push] Backend checks…"
+npm --prefix Backend run lint
+npm --prefix Backend run type-check
+npm --prefix Backend run dead-code
+npm --prefix Backend test
+
+echo "▶ [pre-push] FrontEnd checks…"
+npm --prefix FrontEnd run lint
+npm --prefix FrontEnd run type-check
+npm --prefix FrontEnd run i18n:check
+npm --prefix FrontEnd run dead-code
+npm --prefix FrontEnd test
+
+echo "✅ [pre-push] All checks passed."

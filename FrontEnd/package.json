@@ -10,6 +10,7 @@
     "build": "node scripts/prebuild.js && next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "analyze": "ANALYZE=true next build --webpack",
