@@ -72,22 +72,6 @@ export default function PrepPage() {
   const [genError, setGenError] = useState("");
   const [interviewBrief, setInterviewBrief] = useState<InterviewBrief | null>(null);
 
-  useEffect(() => {
-    if (loading) return;
-    if (!user) { router.replace(createAuthRedirect(ROUTES.candidate.prep)); return; }
-    if (!isPersonal) { router.replace(ROUTES.company.dashboard); return; }
-
-    apiFetch(individualsMyApplicationsApi, "HR", { method: "GET", cache: "no-store" }).then((res) => {
-      const rows: ApplicationItem[] = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-      setApplications(rows);
-      setFetching(false);
-      const appParam = searchParams.get("app");
-      if (appParam && rows.find((r) => r.id === appParam)) {
-        selectApplication(appParam);
-      }
-    });
-  }, [loading, router, user, isPersonal]);
-
   const selectApplication = async (appId: string) => {
     if (selectedId === appId && brief !== null) return;
     setSelectedId(appId);
@@ -105,6 +89,22 @@ export default function PrepPage() {
     setInterviewBrief(ivRes ?? null);
     setLoadingBrief(false);
   };
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) { router.replace(createAuthRedirect(ROUTES.candidate.prep)); return; }
+    if (!isPersonal) { router.replace(ROUTES.company.dashboard); return; }
+
+    apiFetch(individualsMyApplicationsApi, "HR", { method: "GET", cache: "no-store" }).then((res) => {
+      const rows: ApplicationItem[] = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      setApplications(rows);
+      setFetching(false);
+      const appParam = searchParams.get("app");
+      if (appParam && rows.find((r) => r.id === appParam)) {
+        selectApplication(appParam);
+      }
+    });
+  }, [loading, router, user, isPersonal]);
 
   const handleGenerate = async () => {
     if (!selectedId) return;

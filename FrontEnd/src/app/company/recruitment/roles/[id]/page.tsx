@@ -268,7 +268,7 @@ export default function RoleApplicationsPage() {
         return () => clearInterval(interval);
     }, [evaluating, hasAnalysing, id]);
 
-    const loadMore = async () => {
+    const loadMore = useCallback(async () => {
         if (loadingMore || !hasMore) return;
         setLoadingMore(true);
         const nextPage = page + 1;
@@ -277,20 +277,19 @@ export default function RoleApplicationsPage() {
         setPage(nextPage);
         setHasMore(applications.length + res.data.length < totalApps);
         setLoadingMore(false);
-    };
+    }, [loadingMore, hasMore, page, id, applications.length, totalApps]);
 
     // Infinite scroll: auto-load when the "load more" sentinel is visible
-    const loadMoreCb = useCallback(() => { loadMore(); }, [hasMore, loadingMore, page, totalApps, applications.length, id]);
     useEffect(() => {
         const sentinel = loadMoreRef.current;
         if (!sentinel) return;
         const observer = new IntersectionObserver(
-            (entries) => { if (entries[0]?.isIntersecting) loadMoreCb(); },
+            (entries) => { if (entries[0]?.isIntersecting) loadMore(); },
             { rootMargin: '200px' }
         );
         observer.observe(sentinel);
         return () => observer.disconnect();
-    }, [loadMoreCb]);
+    }, [loadMore]);
 
     const handleStatusChange = async (appId: string, newStatus: string) => {
         const prevStatus = applications.find(a => a.applicationId === appId)?.status;

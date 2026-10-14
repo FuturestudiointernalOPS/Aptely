@@ -27,12 +27,12 @@ import {
   endorsePath,
   absoluteUrl,
   createAuthRedirect,
-  mkApiPath,
   vaultProofApi,
   vaultEvidenceApi,
   vaultReferenceApi,
   vaultMyProofsApi,
   vaultMyEvidenceApi,
+  vaultMyEndorsementApi,
   vaultMyEndorsementsApi,
   vaultMyReferencesApi,
   vaultMyProofsUploadApi,
@@ -788,7 +788,7 @@ export default function VaultPage() {
                             )
                               return;
                             const ok = await apiFetch(
-                              mkApiPath(`/vault/me/endorsements/${end.id}`),
+                              vaultMyEndorsementApi(end.id),
                               "HR",
                               { method: "DELETE" },
                             );

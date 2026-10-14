@@ -298,6 +298,8 @@ export default function IndividualDashboardPage() {
 }
 
 function AppCard({ app, locale }: { app: ApplicationItem; locale: Locale }) {
+  // Capture "now" once per mount so render stays pure (Date.now() must not run during render).
+  const [now] = useState(() => Date.now());
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 space-y-3">
       <div className="flex items-start gap-3">
@@ -334,7 +336,7 @@ function AppCard({ app, locale }: { app: ApplicationItem; locale: Locale }) {
       {(() => {
         if (app.interview_scheduled_at) {
           const d = new Date(app.interview_scheduled_at);
-          const daysUntil = Math.ceil((d.getTime() - Date.now()) / 86400000);
+          const daysUntil = Math.ceil((d.getTime() - now) / 86400000);
           const label = daysUntil < 0
             ? `${t(locale, "individual.dashboard.interviewWas", "Interview was")} ${d.toLocaleDateString(locale === "en" ? "en-US" : "fr-FR")}`
             : daysUntil === 0 ? t(locale, "individual.dashboard.interviewToday", "Interview today")

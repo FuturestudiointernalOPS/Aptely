@@ -63,19 +63,6 @@ export default function OffersPage() {
   const [showCounter, setShowCounter] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  useEffect(() => {
-    if (loading) return;
-    if (!user) { router.replace(createAuthRedirect(ROUTES.candidate.offers)); return; }
-    if (!isPersonal) { router.replace(ROUTES.company.dashboard); return; }
-
-    apiFetch(individualsMyOffersApi, "HR", { method: "GET", cache: "no-store" }).then((res) => {
-      const rows: Offer[] = Array.isArray(res) ? res : [];
-      setOffers(rows);
-      setFetching(false);
-      if (rows.length === 1) openOffer(rows[0].id, rows[0]);
-    });
-  }, [loading, router, user, isPersonal]);
-
   const openOffer = async (offerId: string, offer?: Offer) => {
     if (selectedId === offerId) return;
     setSelectedId(offerId);
@@ -90,6 +77,19 @@ export default function OffersPage() {
     setNegotiations(negs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
     setLoadingDetail(false);
   };
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) { router.replace(createAuthRedirect(ROUTES.candidate.offers)); return; }
+    if (!isPersonal) { router.replace(ROUTES.company.dashboard); return; }
+
+    apiFetch(individualsMyOffersApi, "HR", { method: "GET", cache: "no-store" }).then((res) => {
+      const rows: Offer[] = Array.isArray(res) ? res : [];
+      setOffers(rows);
+      setFetching(false);
+      if (rows.length === 1) openOffer(rows[0].id, rows[0]);
+    });
+  }, [loading, router, user, isPersonal]);
 
   const handleAccept = async () => {
     if (!selectedId || acting) return;

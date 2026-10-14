@@ -81,10 +81,6 @@ export const ROUTES = {
   demo: "/demo",
   privacy: "/privacy",
   terms: "/terms",
-  // "Solution" nav link points at the landing homepage — the standalone /solution
-  // page was removed (dead content, unreachable via a distinct URL anymore).
-  solution: "/",
-  talents: "/talents",
   tarifs: "/tarifs",
 
   // Public pages without auth shell
@@ -477,6 +473,8 @@ export const vaultMyEvidenceApi: ApiPath = p(`${API.vault}/me/evidence`);
 export const vaultMyEndorsementsApi: ApiPath = p(
   `${API.vault}/me/endorsements`,
 );
+export const vaultMyEndorsementApi = (id: string): ApiPath =>
+  p(`${API.vault}/me/endorsements/${id}`);
 export const vaultMyReferencesApi: ApiPath = p(`${API.vault}/me/references`);
 export const vaultMyProofsUploadApi: ApiPath = p(
   `${API.vault}/me/proofs/upload`,

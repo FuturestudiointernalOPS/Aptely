@@ -62,6 +62,17 @@ export default function MessagesPage() {
     setMessages(rows);
   }, []);
 
+  const openThread = async (applicationId: string) => {
+    if (selectedApp === applicationId) return;
+    setSelectedApp(applicationId);
+    setMessages([]);
+    setLoadingMsgs(true);
+    await reloadMessages(applicationId);
+    setLoadingMsgs(false);
+    apiFetch(messagesReadApi(applicationId), "HR", { method: "PATCH" });
+    setThreads((prev) => prev.map((t) => t.application_id === applicationId ? { ...t, unread_count: 0 } : t));
+  };
+
   useEffect(() => {
     if (loading) return;
     if (!user) { router.replace(createAuthRedirect(ROUTES.candidate.messages)); return; }
@@ -88,17 +99,6 @@ export default function MessagesPage() {
       }
     });
   }, [loading, router, user, isPersonal]);
-
-  const openThread = async (applicationId: string) => {
-    if (selectedApp === applicationId) return;
-    setSelectedApp(applicationId);
-    setMessages([]);
-    setLoadingMsgs(true);
-    await reloadMessages(applicationId);
-    setLoadingMsgs(false);
-    apiFetch(messagesReadApi(applicationId), "HR", { method: "PATCH" });
-    setThreads((prev) => prev.map((t) => t.application_id === applicationId ? { ...t, unread_count: 0 } : t));
-  };
 
   // Supabase Realtime
   useEffect(() => {

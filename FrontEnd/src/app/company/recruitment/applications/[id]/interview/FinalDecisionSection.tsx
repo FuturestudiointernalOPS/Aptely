@@ -5,7 +5,7 @@ import { Send, Edit3, Sparkles, CheckCircle2, AlertTriangle, Loader } from "luci
 import { apiFetch } from "@/lib/apiHelper";
 import { finalizeSelection, sendSelectionEmails } from "@/lib/api";
 import { getClientLocale, t } from "@/lib/i18n";
-import { appEmailPreviewApi, mkApiPath } from "@/lib/routes";
+import { appEmailPreviewApi, appStatusApi, appSendEmailsApi } from "@/lib/routes";
 
 interface FinalDecisionSectionProps {
   applicationId: string;
@@ -67,7 +67,7 @@ export default function FinalDecisionSection({ applicationId }: FinalDecisionSec
     setError(null);
     try {
       const newStatus = selectedAction === "ACCEPT" ? "VALIDATED" : "REJECTED";
-      const statusRes = await apiFetch(mkApiPath("/applications/" + applicationId + "/status"), "HR", {
+      const statusRes = await apiFetch(appStatusApi(applicationId), "HR", {
         method: "PATCH",
         body: JSON.stringify({ status: newStatus }),
       });
@@ -79,7 +79,7 @@ export default function FinalDecisionSection({ applicationId }: FinalDecisionSec
       });
       if (!finalized) throw new Error(tr("interview.finalDecision.sendError", "Failed to save email templates."));
 
-      const emailResult = await apiFetch(mkApiPath("/applications/" + applicationId + "/send-emails"), "HR", { method: "POST" });
+      const emailResult = await apiFetch(appSendEmailsApi(applicationId), "HR", { method: "POST" });
       if (!emailResult) throw new Error(tr("interview.finalDecision.sendError", "Failed to send the email."));
       if (emailResult.failed > 0 || (emailResult.sent === 0 && emailResult.queued === 0)) {
         throw new Error(emailResult.errors?.[0] || tr("interview.finalDecision.sendError", "The email could not be delivered."));
