@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { env } from "../config/env";
 
 const globalWindowMs = parseInt(env.RATE_LIMIT_WINDOW_MS);
@@ -11,7 +11,7 @@ const authMax = parseInt(env.AUTH_RATE_LIMIT_MAX_REQUESTS);
 const matchMax = parseInt(env.MATCH_RATE_LIMIT_MAX_REQUESTS);
 
 function tenantAwareKey(req: Request): string {
-  const ip = req.ip || "unknown";
+  const ip = req.ip ? ipKeyGenerator(req.ip) : "unknown";
   const user = (req as unknown as Record<string, unknown>).user as
     | { institutionId?: string }
     | undefined;
