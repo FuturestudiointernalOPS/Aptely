@@ -2,10 +2,6 @@ import { z } from "zod";
 
 // ─── Interview Enums ──────────────────────────────────────────────────────────
 
-const interviewStatusEnum = z.enum(["DRAFT", "SCHEDULED", "CANCELLED", "COMPLETED"], {
-  message: "Invalid interview status",
-});
-
 const meetingProviderEnum = z.enum(["GOOGLE_MEET", "TEAMS", "MANUAL", "JITSI"], {
   message: "Invalid meeting provider",
 });
@@ -223,190 +219,167 @@ export const confirmSecondarySchema = z.object({
 });
 
 // ─── Response types ──────────────────────────────────────────────────────────
+// These describe API response payloads. They are only ever consumed as
+// TypeScript types (never validated at runtime), so they are declared as plain
+// types instead of Zod schemas that would never be executed.
 
-const interviewParticipantSchema = z.object({
-  userId: z.string().uuid(),
-  profileText: z.string().nullable(),
-  evaluationWeight: z.number(),
-  role: z.enum(["MANDATORY", "SECONDARY"]).default("MANDATORY"),
-  weight: z.number().nullable(),
-  confirmedSecondary: z.boolean().default(false),
-});
+export interface InterviewParticipantDTO {
+  userId: string;
+  profileText: string | null;
+  evaluationWeight: number;
+  role: "MANDATORY" | "SECONDARY";
+  weight: number | null;
+  confirmedSecondary: boolean;
+}
 
-export type InterviewParticipantDTO = z.infer<typeof interviewParticipantSchema>;
+export interface InterviewDTO {
+  id: string;
+  applicationId: string;
+  name: string;
+  interviewType: string;
+  status: "DRAFT" | "SCHEDULED" | "CANCELLED" | "COMPLETED";
+  scheduledAt: string | null;
+  meetingLink: string | null;
+  meetingLocation: string | null;
+  bookingToken: string | null;
+  notes: string | null;
+  participants: InterviewParticipantDTO[];
+  secondaryCollectiveWeight: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
-const interviewSchema = z.object({
-  id: z.string().uuid(),
-  applicationId: z.string().uuid(),
-  name: z.string(),
-  interviewType: z.string(),
-  status: interviewStatusEnum,
-  scheduledAt: z.string().datetime().nullable(),
-  meetingLink: z.string().nullable(),
-  meetingLocation: z.string().nullable(),
-  bookingToken: z.string().nullable(),
-  notes: z.string().nullable(),
-  participants: z.array(interviewParticipantSchema),
-  secondaryCollectiveWeight: z.number().nullable(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-});
+export interface InterviewGuideQuestionDTO {
+  id: string;
+  question: string;
+  objective: string;
+  scoreHint: string;
+}
 
-export type InterviewDTO = z.infer<typeof interviewSchema>;
+export interface InterviewGuideVersionDTO {
+  id: string;
+  interviewId: string;
+  version: number;
+  model: string;
+  createdBy: string;
+  createdAt: string;
+  questions: InterviewGuideQuestionDTO[];
+}
 
-const interviewGuideQuestionSchema = z.object({
-  id: z.string(),
-  question: z.string(),
-  objective: z.string(),
-  scoreHint: z.string(),
-});
+export interface GeneratedQuestionDTO {
+  id: string;
+  interviewId: string;
+  interviewerId: string;
+  questionType: "DURING_INTERVIEW" | "DEBRIEF" | "TEMPLATE";
+  questionText: string;
+  source: string;
+  createdAt: string;
+}
 
-export type InterviewGuideQuestionDTO = z.infer<typeof interviewGuideQuestionSchema>;
+export interface InterviewQuestionTemplateDTO {
+  id: string;
+  templateKey: string;
+  title: string;
+  markdownContent: string;
+  isDefault: boolean;
+  createdAt: string;
+}
 
-const interviewGuideVersionSchema = z.object({
-  id: z.string().uuid(),
-  interviewId: z.string().uuid(),
-  version: z.number().int(),
-  model: z.string(),
-  createdBy: z.string().uuid(),
-  createdAt: z.string().datetime(),
-  questions: z.array(interviewGuideQuestionSchema),
-});
+export interface DebriefAnswerDTO {
+  id: string;
+  questionKey: string;
+  scoreOver10: number;
+  comment: string | null;
+  createdAt: string;
+}
 
-export type InterviewGuideVersionDTO = z.infer<typeof interviewGuideVersionSchema>;
+export interface InterviewerQuestionPackDTO {
+  interviewerId: string;
+  duringQuestions: GeneratedQuestionDTO[];
+  debriefQuestions: GeneratedQuestionDTO[];
+  debriefAnswers: DebriefAnswerDTO[];
+  defaultTemplate: InterviewQuestionTemplateDTO | null;
+}
 
-const generatedQuestionSchema = z.object({
-  id: z.string().uuid(),
-  interviewId: z.string().uuid(),
-  interviewerId: z.string().uuid(),
-  questionType: z.enum(["DURING_INTERVIEW", "DEBRIEF", "TEMPLATE"]),
-  questionText: z.string(),
-  source: z.string(),
-  createdAt: z.string().datetime(),
-});
+export interface InterviewInterviewerScoreDTO {
+  id: string;
+  interviewId: string;
+  interviewerId: string;
+  globalScoreOver10: number;
+  weightedContribution: number;
+  comment: string | null;
+  submittedAt: string;
+}
 
-export type GeneratedQuestionDTO = z.infer<typeof generatedQuestionSchema>;
+interface InterviewScoreContributionDTO {
+  interviewerId: string;
+  weight: number;
+  scoreOver10: number | null;
+  weightedContribution: number;
+  submitted: boolean;
+}
 
-const interviewQuestionTemplateSchema = z.object({
-  id: z.string().uuid(),
-  templateKey: z.string(),
-  title: z.string(),
-  markdownContent: z.string(),
-  isDefault: z.boolean(),
-  createdAt: z.string().datetime(),
-});
+export interface InterviewScoresSummaryDTO {
+  interviewId: string;
+  totalSubmitted: number;
+  weightedScoreOver10: number;
+  computedAt: string;
+  contributions: InterviewScoreContributionDTO[];
+  details: Record<string, unknown>;
+}
 
-export type InterviewQuestionTemplateDTO = z.infer<typeof interviewQuestionTemplateSchema>;
+interface ScorecardTemplateCriterionDTO {
+  criterionKey: string;
+  label: string;
+  weight: number | null;
+  position: number;
+}
 
-const debriefAnswerSchema = z.object({
-  id: z.string().uuid(),
-  questionKey: z.string(),
-  scoreOver10: z.number(),
-  comment: z.string().nullable(),
-  createdAt: z.string().datetime(),
-});
+interface InterviewScorecardEntryDTO {
+  id: string;
+  criterionKey: string;
+  criterionLabel: string;
+  weight: number | null;
+  score: number | null;
+  comment: string | null;
+  redFlag: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
-export type DebriefAnswerDTO = z.infer<typeof debriefAnswerSchema>;
+export interface InterviewScorecardDTO {
+  id: string;
+  interviewId: string;
+  reviewerId: string;
+  reviewerName: string;
+  status: "DRAFT" | "SUBMITTED" | "ARCHIVED";
+  overallComment: string | null;
+  submittedAt: string | null;
+  isModifiedAfterSubmit: boolean;
+  archivedAt: string | null;
+  templateSnapshot: {
+    templateId: string | null;
+    templateName: string;
+    roleId: string | null;
+    criteria: ScorecardTemplateCriterionDTO[];
+  };
+  entries: InterviewScorecardEntryDTO[];
+  createdAt: string;
+  updatedAt: string;
+}
 
-const interviewerQuestionPackSchema = z.object({
-  interviewerId: z.string().uuid(),
-  duringQuestions: z.array(generatedQuestionSchema),
-  debriefQuestions: z.array(generatedQuestionSchema),
-  debriefAnswers: z.array(debriefAnswerSchema),
-  defaultTemplate: interviewQuestionTemplateSchema.nullable(),
-});
+export interface InterviewScorecardsListDTO {
+  scorecards: InterviewScorecardDTO[];
+  visibility: {
+    myReviewerId: string;
+    myScorecardStatus: "NONE" | "DRAFT" | "SUBMITTED" | "ARCHIVED";
+    canViewOthers: boolean;
+    canReview: boolean;
+  };
+}
 
-export type InterviewerQuestionPackDTO = z.infer<typeof interviewerQuestionPackSchema>;
-
-const interviewInterviewerScoreSchema = z.object({
-  id: z.string().uuid(),
-  interviewId: z.string().uuid(),
-  interviewerId: z.string().uuid(),
-  globalScoreOver10: z.number(),
-  weightedContribution: z.number(),
-  comment: z.string().nullable(),
-  submittedAt: z.string().datetime(),
-});
-
-export type InterviewInterviewerScoreDTO = z.infer<typeof interviewInterviewerScoreSchema>;
-
-const interviewScoreContributionSchema = z.object({
-  interviewerId: z.string().uuid(),
-  weight: z.number(),
-  scoreOver10: z.number().nullable(),
-  weightedContribution: z.number(),
-  submitted: z.boolean(),
-});
-
-const interviewScoresSummarySchema = z.object({
-  interviewId: z.string().uuid(),
-  totalSubmitted: z.number().int(),
-  weightedScoreOver10: z.number(),
-  computedAt: z.string().datetime(),
-  contributions: z.array(interviewScoreContributionSchema),
-  details: z.record(z.string(), z.unknown()),
-});
-
-export type InterviewScoresSummaryDTO = z.infer<typeof interviewScoresSummarySchema>;
-
-const scorecardTemplateCriterionSchema = z.object({
-  criterionKey: z.string(),
-  label: z.string(),
-  weight: z.number().nullable(),
-  position: z.number().int(),
-});
-
-const interviewScorecardEntrySchema = z.object({
-  id: z.string().uuid(),
-  criterionKey: z.string(),
-  criterionLabel: z.string(),
-  weight: z.number().nullable(),
-  score: z.number().nullable(),
-  comment: z.string().nullable(),
-  redFlag: z.boolean().default(false),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-});
-
-const interviewScorecardSchema = z.object({
-  id: z.string().uuid(),
-  interviewId: z.string().uuid(),
-  reviewerId: z.string().uuid(),
-  reviewerName: z.string(),
-  status: z.enum(["DRAFT", "SUBMITTED", "ARCHIVED"]),
-  overallComment: z.string().nullable(),
-  submittedAt: z.string().datetime().nullable(),
-  isModifiedAfterSubmit: z.boolean(),
-  archivedAt: z.string().datetime().nullable(),
-  templateSnapshot: z.object({
-    templateId: z.string().uuid().nullable(),
-    templateName: z.string(),
-    roleId: z.string().uuid().nullable(),
-    criteria: z.array(scorecardTemplateCriterionSchema),
-  }),
-  entries: z.array(interviewScorecardEntrySchema),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-});
-
-export type InterviewScorecardDTO = z.infer<typeof interviewScorecardSchema>;
-
-const interviewScorecardsListSchema = z.object({
-  scorecards: z.array(interviewScorecardSchema),
-  visibility: z.object({
-    myReviewerId: z.string().uuid(),
-    myScorecardStatus: z.enum(["NONE", "DRAFT", "SUBMITTED", "ARCHIVED"]),
-    canViewOthers: z.boolean(),
-    canReview: z.boolean(),
-  }),
-});
-
-export type InterviewScorecardsListDTO = z.infer<typeof interviewScorecardsListSchema>;
-
-const candidateInterviewHistoryItemSchema = z.object({
-  interview: interviewSchema,
-  scoreSummary: interviewScoresSummarySchema.nullable(),
-  myScorecardStatus: z.enum(["NONE", "DRAFT", "SUBMITTED", "ARCHIVED"]).default("NONE"),
-});
-
-export type CandidateInterviewHistoryItemDTO = z.infer<typeof candidateInterviewHistoryItemSchema>;
+export interface CandidateInterviewHistoryItemDTO {
+  interview: InterviewDTO;
+  scoreSummary: InterviewScoresSummaryDTO | null;
+  myScorecardStatus: "NONE" | "DRAFT" | "SUBMITTED" | "ARCHIVED";
+}
