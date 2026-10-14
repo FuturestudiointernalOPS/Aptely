@@ -25,11 +25,7 @@ const PUBLIC_SHELL_ROUTES = [
   offerPublicPrefix,
   offerSignPrefix,
   offerSignHRPrefix,
-  // ROUTES.solution now equals "/" (standalone page removed) — already covered
-  // by the explicit `pathname === "/"` check below, must not be repeated here
-  // or `.startsWith("/")` would match every route in the app.
   ROUTES.tarifs,
-  ROUTES.talents,
   ROUTES.demo,
   ROUTES.candidate.endorse,
   ROUTES.public.profile,

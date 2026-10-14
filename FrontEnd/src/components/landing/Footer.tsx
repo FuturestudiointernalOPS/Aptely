@@ -35,7 +35,6 @@ const Footer: React.FC = () => {
             <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] font-sans">{t(locale, "footer.col.product", "Product")}</p>
             <nav className="flex flex-col gap-3">
               {[
-                { label: t(locale, "footer.link.solution", "Solution"), href: ROUTES.solution },
                 { label: t(locale, "footer.link.demo", "How it works"), href: howItWorksHref },
               ].map((l) => (
                 <Link key={l.href} href={l.href} className="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors font-sans">

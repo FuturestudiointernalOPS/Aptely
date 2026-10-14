@@ -12,7 +12,7 @@ type Locale = (typeof SUPPORTED_LOCALES)[number];
 // Public marketing pages (landing Navbar/Footer) default to English for first-time
 // visitors regardless of browser language — a visitor picks French explicitly via the
 // locale toggle, which sets the NEXT_LOCALE cookie and is respected from then on.
-const MARKETING_PATHS = new Set(["/", "/solution", "/talents", "/tarifs", "/demo"]);
+const MARKETING_PATHS = new Set(["/", "/tarifs", "/demo"]);
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

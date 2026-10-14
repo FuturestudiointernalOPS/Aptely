@@ -23,7 +23,6 @@ const Navbar: React.FC = () => {
   };
 
   const NAV_LINKS: { label: string; path: string }[] = [
-    // Solution hidden
   ];
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
