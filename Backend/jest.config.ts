@@ -34,6 +34,9 @@ const config: Config = {
 
   // Nettoie les mocks entre chaque test
   clearMocks: true,
+
+  // Un run qui ne trouve aucun test ne doit pas échouer (CI sur un repo frais).
+  passWithNoTests: true,
 };
 
 export default config;
