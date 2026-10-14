@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import InterviewerAssignment from "./InterviewerAssignment";
 
-const getHRMembersMock = vi.fn();
+const getHRMembersPaginatedMock = vi.fn();
 const createInterviewMock = vi.fn();
 const assignInterviewersMock = vi.fn();
 const getInterviewAvailabilityMock = vi.fn();
@@ -11,7 +11,7 @@ const scheduleInterviewMock = vi.fn();
 const apiFetchMock = vi.fn();
 
 vi.mock("@/lib/api", () => ({
-  getHRMembers: (...args: unknown[]) => getHRMembersMock(...args),
+  getHRMembersPaginated: (...args: unknown[]) => getHRMembersPaginatedMock(...args),
   createInterview: (...args: unknown[]) => createInterviewMock(...args),
   assignInterviewers: (...args: unknown[]) => assignInterviewersMock(...args),
   getInterviewAvailability: (...args: unknown[]) => getInterviewAvailabilityMock(...args),
@@ -24,17 +24,20 @@ vi.mock("@/lib/apiHelper", () => ({
 
 describe("InterviewerAssignment", () => {
   beforeEach(() => {
-    getHRMembersMock.mockReset();
+    getHRMembersPaginatedMock.mockReset();
     createInterviewMock.mockReset();
     assignInterviewersMock.mockReset();
     getInterviewAvailabilityMock.mockReset();
     scheduleInterviewMock.mockReset();
     apiFetchMock.mockReset();
 
-    getHRMembersMock.mockResolvedValue([
-      { userId: "u1", email: "hr1@aptely.com" },
-      { userId: "u2", email: "hr2@aptely.com" },
-    ]);
+    getHRMembersPaginatedMock.mockResolvedValue({
+      members: [
+        { userId: "u1", email: "hr1@aptely.com" },
+        { userId: "u2", email: "hr2@aptely.com" },
+      ],
+      meta: { total: 2, page: 1, limit: 20, hasMore: false },
+    });
     createInterviewMock.mockResolvedValue({ id: "int_1", bookingToken: "tok_1" });
     assignInterviewersMock.mockResolvedValue({ id: "int_1" });
     getInterviewAvailabilityMock.mockResolvedValue({ slots: [] });
@@ -59,9 +62,11 @@ describe("InterviewerAssignment", () => {
     await user.click(screen.getByRole("button", { name: "hr1@aptely.com" }));
     await user.click(screen.getByRole("button", { name: /save interviewers|enregistrer/i }));
 
-    expect(assignInterviewersMock).toHaveBeenCalledWith("int_1", [
-      { userId: "u1", evaluationWeight: 100 },
-    ]);
+    expect(assignInterviewersMock).toHaveBeenCalledWith(
+      "int_1",
+      [{ userId: "u1", evaluationWeight: 100, role: "MANDATORY" }],
+      null,
+    );
   }, 10000);
 
   it("disables save while assignment mutation is pending", async () => {
