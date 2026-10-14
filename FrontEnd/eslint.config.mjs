@@ -38,6 +38,14 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // R3: mkApiPath is reserved FOR api.*.ts files — exempt them from the ban.
+  {
+    files: ["src/lib/api*.ts"],
+    rules: {
+      "no-restricted-imports": "off",
+      "no-restricted-syntax": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -45,6 +53,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Build tooling (CommonJS node scripts, not application code):
+    "scripts/**",
   ]),
 ]);
 
