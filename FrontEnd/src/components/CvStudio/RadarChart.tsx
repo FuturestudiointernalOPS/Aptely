@@ -12,7 +12,6 @@ interface RadarChartProps {
 }
 
 export default function RadarChart({ modules, size = 280 }: RadarChartProps) {
-  if (modules.length === 0) return null;
   const center = size / 2;
   const radius = size / 2 - 30;
   const angleStep = (2 * Math.PI) / modules.length;
@@ -32,6 +31,8 @@ export default function RadarChart({ modules, size = 280 }: RadarChartProps) {
       };
     });
   }, [modules, angleStep, radius, center]);
+
+  if (modules.length === 0) return null;
 
   const polygon = points.map((p) => `${p.x},${p.y}`).join(" ");
 
