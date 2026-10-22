@@ -80,6 +80,24 @@ async function rotateInviteIfStale(invite: InviteRow, institutionId: string, cre
   return created as InviteRow;
 }
 
+/** Legacy membership status that goes with a role (OWNER→OWNER, ADMIN→ADMIN, else ACTIVE). */
+function statusForRole(role: string): "OWNER" | "ADMIN" | "ACTIVE" {
+  return role === "OWNER" ? "OWNER" : role === "ADMIN" ? "ADMIN" : "ACTIVE";
+}
+
+/**
+ * Sets the legacy profiles.institution_id only when the user has none, so managing a
+ * member here never silently moves someone whose primary workspace is elsewhere.
+ */
+async function linkProfileIfUnbound(userId: string, institutionId: string): Promise<void> {
+  await supabaseAdmin.from("profiles").update({ role: "HR" }).eq("id", userId);
+  await supabaseAdmin
+    .from("profiles")
+    .update({ institution_id: institutionId })
+    .eq("id", userId)
+    .is("institution_id", null);
+}
+
 // ─── POST /institution/create ─────────────────────────────────────────────────
 
 export const createInstitution = asyncHandler(
@@ -469,7 +487,12 @@ export const leaveInstitution = asyncHandler(
 
     if (deleteError) throw new AppError(500, "Failed to leave institution");
 
-    await supabaseAdmin.from("profiles").update({ institution_id: null }).eq("id", userId);
+    // Only unbind the legacy primary institution if it is the one being left.
+    await supabaseAdmin
+      .from("profiles")
+      .update({ institution_id: null })
+      .eq("id", userId)
+      .eq("institution_id", institutionId);
 
     clearAuthCache(userId);
 
@@ -581,16 +604,12 @@ export const handleJoinRequest = asyncHandler(
 
     if (action === "ACCEPT") {
       // Service role needed — updating another user's profile
-      const { error: updateProfileError } = await supabaseAdmin
-        .from("profiles")
-        .update({ institution_id: institutionId, role: "HR" })
-        .eq("id", targetUserId);
+      await linkProfileIfUnbound(targetUserId, institutionId);
 
-      if (updateProfileError) throw new AppError(500, "Failed to link user to institution");
-
+      // Pending rows carry no role; give the canonical MEMBER role like invite joins do.
       const { error: updateMemberError } = await supabaseAdmin
         .from("institution_members")
-        .update({ status: "ACTIVE" })
+        .update({ status: "ACTIVE", role_specialization: "MEMBER" })
         .eq("id", joinReq.id);
 
       if (updateMemberError) throw new AppError(500, "Failed to add user to institution members");
@@ -642,39 +661,43 @@ export const updateMemberStatus = asyncHandler(
     const institutionId = req.user!.institutionId;
     if (!institutionId) throw new AppError(403, "You are not linked to any institution");
 
-    const targetStatus = await getMembershipStatus(userId, institutionId, supabaseAdmin);
-    if (!targetStatus) throw new AppError(404, "Membership not found");
+    const target = await getEffectiveRole(userId, institutionId, supabaseAdmin);
+    if (!target) throw new AppError(404, "Membership not found");
 
-    if (targetStatus === "OWNER") {
+    if (target.status === "OWNER") {
       throw new AppError(403, "Owner status can only be changed through role management");
+    }
+    if (target.status === "PENDING") {
+      throw new AppError(422, "Pending join requests must be accepted or rejected");
     }
     // Rank guard: actor must strictly outrank the target (permission gated at route).
     await assertRankAuthority(currentUserId, userId, institutionId, supabaseAdmin);
 
+    // Reactivating restores the status that matches the member's role — an ADMIN
+    // must come back as ADMIN, not as a plain ACTIVE member.
+    const nextStatus = status === "SUSPENDED" ? "SUSPENDED" : statusForRole(target.role);
+
     // Service role needed — modifies another user's membership + profile
     const { error } = await supabaseAdmin
       .from("institution_members")
-      .update({ status })
+      .update({ status: nextStatus })
       .eq("user_id", userId)
       .eq("institution_id", institutionId);
 
     if (error) throw new AppError(500, "Failed to update member status");
 
-    if (status === "SUSPENDED") {
+    if (nextStatus === "SUSPENDED") {
       await supabaseAdmin
         .from("profiles")
         .update({ institution_id: null })
         .eq("id", userId)
         .eq("institution_id", institutionId);
     } else {
-      await supabaseAdmin
-        .from("profiles")
-        .update({ institution_id: institutionId, role: "HR" })
-        .eq("id", userId);
+      await linkProfileIfUnbound(userId, institutionId);
     }
 
     clearAuthCache(userId);
-    res.status(200).json({ userId, status });
+    res.status(200).json({ userId, status: nextStatus });
   }
 );
 
@@ -704,7 +727,8 @@ export const updateMemberRole = asyncHandler(
       if (owners <= 1) throw new AppError(409, "You cannot demote the only OWNER.");
     }
 
-    const newStatus = role === "OWNER" ? "OWNER" : role === "ADMIN" ? "ADMIN" : "ACTIVE";
+    // A role change must not lift a suspension.
+    const newStatus = targetStatus === "SUSPENDED" ? "SUSPENDED" : statusForRole(role);
     const { error } = await supabaseAdmin
       .from("institution_members")
       .update({ status: newStatus, role_specialization: role })
@@ -713,10 +737,7 @@ export const updateMemberRole = asyncHandler(
 
     if (error) throw new AppError(500, "Failed to update member role");
 
-    await supabaseAdmin
-      .from("profiles")
-      .update({ institution_id: institutionId, role: "HR" })
-      .eq("id", targetUserId);
+    if (newStatus !== "SUSPENDED") await linkProfileIfUnbound(targetUserId, institutionId);
 
     clearAuthCache(targetUserId);
     res.status(200).json({ userId: targetUserId, role });
@@ -1683,13 +1704,13 @@ export const deleteCustomRole = asyncHandler(
       .eq("institution_id", institutionId)
       .eq("custom_role_id", id);
 
+    // Status is left untouched so suspended members stay suspended.
     await supabaseAdmin
       .from("institution_members")
       .update({
         role_specialization: "MEMBER",
         custom_role_id: null,
         role_custom_label: null,
-        status: "ACTIVE",
       })
       .eq("institution_id", institutionId)
       .eq("custom_role_id", id);
@@ -1743,6 +1764,9 @@ export const updateMemberRoleSpecialization = asyncHandler(
     if (target.status === "OWNER") {
       throw new AppError(400, "Cannot change the owner's role. Transfer ownership first.");
     }
+    if (target.status === "PENDING") {
+      throw new AppError(422, "Cannot assign a role while the join request is pending");
+    }
 
     // Rank guard: actor must outrank the target AND the role being assigned.
     await assertRankAuthority(
@@ -1772,6 +1796,8 @@ export const updateMemberRoleSpecialization = asyncHandler(
     } else if (roleSpecialization === "ADMIN") {
       status = "ADMIN";
     }
+    // A role change must not lift a suspension.
+    if (target.status === "SUSPENDED") status = "SUSPENDED";
 
     const { error } = await supabaseAdmin
       .from("institution_members")
@@ -1810,7 +1836,8 @@ export const getMyMemberships = asyncHandler(
       `
       )
       .eq("user_id", userId)
-      .neq("status", "SUSPENDED")
+      // Pending join requests are not usable workspaces (every call would be denied).
+      .in("status", ["OWNER", "ADMIN", "ACTIVE"])
       .order("joined_at", { ascending: false });
 
     if (error) throw new AppError(500, "Failed to load memberships");

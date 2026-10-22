@@ -7,8 +7,10 @@ import { generateSecret, encryptWebhookSecret } from "./webhooks.service";
 import { CreateWebhookInput, UpdateWebhookInput } from "./webhooks.schema";
 
 function resolveInstitutionId(req: AuthenticatedRequest): string {
-  const id = req.workspace?.institutionId ?? req.headers["x-workspace-id"];
-  if (!id || typeof id !== "string") throw new AppError(400, "Missing institution context");
+  // Never read X-Workspace-Id directly: authGuard validates it against the user's
+  // memberships and folds it into req.user, the institution requirePermission checked.
+  const id = req.workspace?.institutionId ?? req.user?.activeInstitutionId ?? req.user?.institutionId;
+  if (!id) throw new AppError(400, "Missing institution context");
   return id;
 }
 

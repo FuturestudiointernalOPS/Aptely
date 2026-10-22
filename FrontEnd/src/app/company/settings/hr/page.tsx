@@ -483,7 +483,14 @@ export default function TeamManagementPage() {
 
     setMembers((prev) =>
       prev.map((m) =>
-        m.userId === member.userId ? { ...m, membershipStatus: status } : m,
+        m.userId === member.userId
+          ? {
+              ...m,
+              // A reactivated admin gets its ADMIN status back (mirrors the backend).
+              membershipStatus:
+                status === "ACTIVE" && m.roleSpecialization === "ADMIN" ? "ADMIN" : status,
+            }
+          : m,
       ),
     );
     setFeedback({
@@ -540,9 +547,12 @@ export default function TeamManagementPage() {
       setAssigningRole(false);
       return;
     }
-    // status follows the role: ADMIN→ADMIN, everything else→ACTIVE.
+    // status follows the role (ADMIN→ADMIN, everything else→ACTIVE), except that a
+    // role change never lifts a suspension.
     const newStatus = (
-      selectedRoleSpec === "ADMIN" ? "ADMIN" : "ACTIVE"
+      roleTarget.membershipStatus === "SUSPENDED"
+        ? "SUSPENDED"
+        : selectedRoleSpec === "ADMIN" ? "ADMIN" : "ACTIVE"
     ) as HRMember["membershipStatus"];
     const customLabel =
       selectedRoleSpec === "CUSTOM"

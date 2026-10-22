@@ -219,11 +219,12 @@ export default function OrganizationPage() {
         setLoading(true);
         try {
             const [deptRes, posRes] = await Promise.all([
-                apiFetch(API.departments, "HR") as Promise<{ data: Department[] } | null>,
-                apiFetch(API.jobPositions, "HR") as Promise<{ data: JobPosition[] } | null>,
+                apiFetch(API.departments, "HR") as Promise<Department[] | { data: Department[] } | null>,
+                apiFetch(API.jobPositions, "HR") as Promise<JobPosition[] | { data: JobPosition[] } | null>,
             ]);
-            setDepartments(deptRes?.data ?? []);
-            setPositions(posRes?.data ?? []);
+            // apiFetch already unwraps the { data } envelope.
+            setDepartments(Array.isArray(deptRes) ? deptRes : deptRes?.data ?? []);
+            setPositions(Array.isArray(posRes) ? posRes : posRes?.data ?? []);
         } catch { /* silent */ }
         setLoading(false);
     };

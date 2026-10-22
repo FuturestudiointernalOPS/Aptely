@@ -126,8 +126,8 @@ export default function LeavePage() {
         setLoadingReq(true);
         try {
             const params = filterStatus ? `status=${filterStatus}` : "";
-            const res = await apiFetch(params ? withParams(leaveRequestsApi, params) : leaveRequestsApi, "HR") as { data: LeaveRequest[] } | null;
-            setRequests(res?.data ?? []);
+            const res = await apiFetch(params ? withParams(leaveRequestsApi, params) : leaveRequestsApi, "HR") as LeaveRequest[] | { data: LeaveRequest[] } | null;
+            setRequests(Array.isArray(res) ? res : res?.data ?? []);
         } catch { /* silent */ }
         setLoadingReq(false);
     };
@@ -135,8 +135,8 @@ export default function LeavePage() {
     const loadPolicies = async () => {
         setLoadingPol(true);
         try {
-            const res = await apiFetch(leavePoliciesApi, "HR") as { data: LeavePolicy[] } | null;
-            const loaded = res?.data ?? [];
+            const res = await apiFetch(leavePoliciesApi, "HR") as LeavePolicy[] | { data: LeavePolicy[] } | null;
+            const loaded = Array.isArray(res) ? res : res?.data ?? [];
             // Fill missing types with defaults
             const filled: LeavePolicy[] = LEAVE_TYPES.map((type) => {
                 const found = loaded.find((p) => p.leave_type === type);

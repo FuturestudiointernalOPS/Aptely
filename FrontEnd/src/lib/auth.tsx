@@ -8,7 +8,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { refreshHrSessionIfPossible } from "@/lib/apiHelper";
+import { persistActiveWorkspace, refreshHrSessionIfPossible } from "@/lib/apiHelper";
 import { ROUTES, AUTH_INTERNAL, PROXY_API } from "@/lib/routes";
 
 interface AuthUser {
@@ -211,12 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const expiresAt: number = data.session?.expiresAt ?? data.session?.expires_at ?? 0;
             const userId: string | null = data.user?.id ?? null;
 
-            if (typeof window !== "undefined") {
-                try {
-                    if (activeInstitutionId) window.localStorage.setItem("aptely_active_workspace", activeInstitutionId);
-                    else window.localStorage.removeItem("aptely_active_workspace");
-                } catch { /* ignore */ }
-            }
+            persistActiveWorkspace(activeInstitutionId);
 
             // Store access token as httpOnly cookie + expiry as readable cookie
             // Must await before navigating — httpOnly cookie must be present for the
@@ -275,8 +270,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         deleteCookie("hr_token_expiry");
         if (typeof window !== "undefined") {
             localStorage.removeItem("user_institutionId");
-            localStorage.removeItem("aptely_active_workspace");
         }
+        persistActiveWorkspace(undefined);
         setUser(null);
     }, []);
 

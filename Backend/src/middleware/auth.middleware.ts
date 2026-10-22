@@ -40,7 +40,10 @@ type CachedAuthProfile = {
 
 const authProfileCache = new Map<string, CachedAuthProfile>();
 const tokenUserCache = new Map<string, { userId: string; email: string; expiresAt: number }>();
+// Key: `${userId}:${institutionId}` — short TTL so removals/suspensions apply quickly.
+const activeMembershipCache = new Map<string, { active: boolean; expiresAt: number }>();
 const AUTH_CACHE_TTL_MS = 5 * 60 * 1000;
+const MEMBERSHIP_CACHE_TTL_MS = 60 * 1000;
 const MAX_CACHE_SIZE = 2000;
 
 // Periodic sweep: evict expired entries every 5 minutes to prevent unbounded growth
@@ -48,6 +51,7 @@ setInterval(() => {
   const now = Date.now();
   for (const [k, v] of authProfileCache) if (v.expiresAt < now) authProfileCache.delete(k);
   for (const [k, v] of tokenUserCache) if (v.expiresAt < now) tokenUserCache.delete(k);
+  for (const [k, v] of activeMembershipCache) if (v.expiresAt < now) activeMembershipCache.delete(k);
 }, AUTH_CACHE_TTL_MS).unref();
 
 function readCachedProfile(userId: string): CachedAuthProfile | null {
@@ -73,6 +77,9 @@ function writeCachedProfile(userId: string, profile: Omit<CachedAuthProfile, "ex
 
 export function clearAuthCache(userId: string): void {
   authProfileCache.delete(userId);
+  for (const key of activeMembershipCache.keys()) {
+    if (key.startsWith(`${userId}:`)) activeMembershipCache.delete(key);
+  }
 }
 
 function readCachedTokenUser(token: string): { userId: string; email: string } | null {
@@ -317,6 +324,37 @@ async function resolveInstitutionIdFromMembership(userId: string): Promise<strin
   return data.institution_id ?? undefined;
 }
 
+const PERSONAL_WORKSPACE_VALUES = new Set(["", "individual", "personal", "null"]);
+
+/** Institution id named by X-Workspace-Id, or null for the personal workspace / no header. */
+function requestedWorkspaceId(req: Request): string | null {
+  const raw = (req.headers["x-workspace-id"] ?? "").toString().trim().toLowerCase();
+  return PERSONAL_WORKSPACE_VALUES.has(raw) ? null : raw;
+}
+
+async function isActiveMember(userId: string, institutionId: string): Promise<boolean> {
+  const key = `${userId}:${institutionId}`;
+  const cached = activeMembershipCache.get(key);
+  if (cached && cached.expiresAt >= Date.now()) return cached.active;
+
+  const { data, error } = await supabaseAdmin
+    .from("institution_members")
+    .select("status")
+    .eq("user_id", userId)
+    .eq("institution_id", institutionId)
+    .in("status", ["OWNER", "ADMIN", "ACTIVE"])
+    .maybeSingle();
+
+  // Invalid UUIDs make Postgres error out — treat as "not a member".
+  const active = !error && !!data;
+  if (activeMembershipCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = activeMembershipCache.keys().next().value;
+    if (firstKey !== undefined) activeMembershipCache.delete(firstKey);
+  }
+  activeMembershipCache.set(key, { active, expiresAt: Date.now() + MEMBERSHIP_CACHE_TTL_MS });
+  return active;
+}
+
 async function resolveUserFromSupabaseToken(token: string): Promise<{ userId: string; email: string }> {
   const cached = readCachedTokenUser(token);
   if (cached) return cached;
@@ -391,12 +429,24 @@ export const authGuard = async (
     if (!institutionId) {
       institutionId = await resolveInstitutionIdFromMembership(userId);
     }
+    // Single workspace per request: permissions (requirePermission) and data scoping
+    // (controllers reading req.user.institutionId) must target the same institution.
+    // The workspace the client selected (X-Workspace-Id, else the JWT active claim)
+    // wins, but only if the user is an active member of it — never trust the header.
+    const requestedWorkspace = requestedWorkspaceId(req) ?? resolved.activeInstitutionId ?? null;
+    if (
+      requestedWorkspace &&
+      requestedWorkspace !== institutionId &&
+      (await isActiveMember(userId, requestedWorkspace))
+    ) {
+      institutionId = requestedWorkspace;
+    }
 
     req.user = {
       id: userId,
       email,
       institutionId,
-      activeInstitutionId: resolved.activeInstitutionId ?? (institutionId ?? null),
+      activeInstitutionId: institutionId ?? null,
       isSuperAdmin: resolved.isSuperAdmin,
     };
     req.db = createAuthenticatedClient(token);
@@ -408,13 +458,11 @@ export const authGuard = async (
   }
 };
 
-const PERSONAL_VALUES = new Set(["", "individual", "personal", "null"]);
-
 export function isPersonalWorkspaceRequest(req: AuthenticatedRequest): boolean {
   if (req.workspace) return req.workspace.isPersonal;
 
   const headerRaw = (req.headers["x-workspace-id"] ?? "").toString().trim().toLowerCase();
-  if (PERSONAL_VALUES.has(headerRaw)) return true;
+  if (PERSONAL_WORKSPACE_VALUES.has(headerRaw)) return true;
   if (headerRaw.length > 0) return false;
 
   const hasInstitution = Boolean(req.user?.activeInstitutionId ?? req.user?.institutionId);
