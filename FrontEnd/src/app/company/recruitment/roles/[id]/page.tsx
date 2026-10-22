@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getRoleById, getApplicationsByRole, Role, Application, evaluateRole, updateApplicationStatus, finalizeSelection, sendSelectionEmails, saveRolePostSheet, relaunchApplicationMatching } from "@/lib/api";
 import { listWavesForRole } from "@/lib/api.waves";
 import { useRequireInstitution } from "@/lib/auth";
+import { useWorkspace } from "@/lib/workspace";
 import StatusBadge from "@/components/StatusBadge";
 import CandidateDrawer from "./CandidateDrawer";
 import RoleDnaForm from "@/components/RoleDnaForm";
@@ -182,6 +183,10 @@ export default function RoleApplicationsPage() {
 
     // Editable role post sheet
     const [sheetOpen, setSheetOpen] = useState(false);
+    // Editing the job post sheet needs roles.update (STANDARD_HR/RECRUITER can only
+    // view the pipeline); the backend refuses the save otherwise.
+    const { hasPermission } = useWorkspace();
+    const canEditRole = hasPermission("roles.update");
     const [sheetSaving, setSheetSaving] = useState(false);
     const [nameRole, setNameRole] = useState("");
     const [startDate, setStartDate] = useState("");
@@ -652,6 +657,7 @@ export default function RoleApplicationsPage() {
             </div>
 
             {/* Editable Role Post Sheet */}
+            {canEditRole && (
             <div className="bg-[var(--bg-surface)] border border-[var(--border)] overflow-hidden">
                 <button
                     className="w-full px-6 py-5 flex items-center justify-between hover:bg-[var(--bg-surface)] transition-colors"
@@ -687,6 +693,7 @@ export default function RoleApplicationsPage() {
                     </div>
                 )}
             </div>
+            )}
 
             {/* Filters Area */}
             <div className="space-y-2">

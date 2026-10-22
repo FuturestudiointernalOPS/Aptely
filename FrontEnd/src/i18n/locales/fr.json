@@ -4412,5 +4412,8 @@
   "session.recovery.failedDesc": "Votre session est active mais le serveur ne répond pas. Réessayez dans un instant.",
   "perm.editor.rankReadOnly": "Lecture seule — vous ne pouvez pas modifier un rôle de rang égal ou supérieur au vôtre.",
   "institution.settings.workspaceSaveFailed": "Impossible d'enregistrer les paramètres de l'espace.",
-  "roles.management.actionFailed": "Action impossible : vérifiez vos permissions ou réessayez."
+  "roles.management.actionFailed": "Action impossible : vérifiez vos permissions ou réessayez.",
+  "roles.create.forbiddenTitle": "Création non autorisée",
+  "roles.create.forbiddenDesc": "Votre rôle ne permet pas de créer une fiche de poste. Demandez à un responsable RH ou à un administrateur.",
+  "roles.create.backToList": "Retour aux fiches de poste"
 }
