@@ -41,6 +41,19 @@ function resolveInstitutionId(req: AuthenticatedRequest): string {
   return id;
 }
 
+// ─── Helper: actor's role, recorded on decisions for the audit trail ─────────
+// req.workspace is never populated (no workspace middleware is mounted), so the role
+// has to be read from the membership — otherwise every *_by_role column stays null.
+async function actorRole(userId: string, institutionId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("institution_members")
+    .select("role_specialization, status")
+    .eq("user_id", userId)
+    .eq("institution_id", institutionId)
+    .maybeSingle();
+  return (data?.role_specialization as string | null) ?? (data?.status as string | null) ?? null;
+}
+
 // ─── Helper: assert application belongs to institution ────────────────────────
 async function assertAppInInstitution(
   applicationId: string,
@@ -90,7 +103,7 @@ export const createDecision = asyncHandler(
         action,
         reason: reason || null,
         actor_id: user.id,
-        decided_by_role: req.workspace?.roleSpecialization ?? null,
+        decided_by_role: await actorRole(user.id, institutionId),
       })
       .select("id, action, reason, created_at")
       .single();
@@ -220,6 +233,7 @@ export const decide = asyncHandler(
         action,
         reason: reason || null,
         actor_id: user.id,
+        decided_by_role: await actorRole(user.id, institutionId),
       })
       .select("id, action, reason, created_at")
       .single();
@@ -301,7 +315,7 @@ export const ratifyDecision = asyncHandler(
         application_id: applicationId,
         decision_id: decisionId,
         ratified_by: user.id,
-        ratified_by_role: req.workspace?.roleSpecialization ?? null,
+        ratified_by_role: await actorRole(user.id, institutionId),
         status: ratificationStatus,
         reason: reason || null,
       })

@@ -4,6 +4,8 @@ import { ROUTES, rolePath } from "@/lib/routes";
 import { useState, useTransition } from "react";
 import type { Role } from "@/lib/api";
 import { useRequireInstitution } from "@/lib/auth";
+import { useWorkspace } from "@/lib/workspace";
+import { useToast } from "@/components/ui/Toast";
 import {
   Search,
   Briefcase,
@@ -59,6 +61,16 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
   const [isPending, startTransition] = useTransition();
   const [publishGateRoleId, setPublishGateRoleId] = useState<string | null>(null);
 
+  // Actions follow the backend permissions: e.g. HR_LEAD can create/update job post
+  // sheets but not delete them, STANDARD_HR can only view.
+  const { hasPermission } = useWorkspace();
+  const toast = useToast();
+  const canCreate = hasPermission("roles.create");
+  const canUpdate = hasPermission("roles.update");
+  const canDelete = hasPermission("roles.delete");
+  const actionFailed = () =>
+    toast.error(t(locale, "roles.management.actionFailed", "Action impossible : vérifiez vos permissions ou réessayez."));
+
   const LOCALIZED_STATUS_TABS = [
     { value: "ALL", label: t(locale, "roles.management.allRoles", "All Roles") },
     { value: "ACTIVE", label: t(locale, "roles.management.active", "Active") },
@@ -102,7 +114,7 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
         title={t(locale, "roles.management.title", "Job Post Sheets")}
         subtitle={t(locale, "roles.management.totalRoles", "{{count}} job post sheets created", { count: roles.length })}
         actions={
-          <Link
+          canCreate && <Link
             href={ROUTES.company.recruitment.rolesCreate}
             className="flex items-center gap-2 px-4 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all"
           >
@@ -155,7 +167,7 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
                 : t(locale, "roles.management.emptyCreate", "Create your first job post sheet to start attracting candidates")}
             </p>
           </div>
-          {!search && filter === "ALL" && (
+          {!search && filter === "ALL" && canCreate && (
             <Link
               href={ROUTES.company.recruitment.rolesCreate}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent)] text-[var(--accent)] text-sm font-semibold hover:bg-[var(--accent)] hover:text-white transition-all mt-2"
@@ -218,7 +230,7 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
               </Link>
 
               <div className="flex items-center gap-2 self-end sm:self-center border-t border-[var(--border)] sm:border-t-0 pt-4 sm:pt-0 w-full sm:w-auto justify-end">
-                {role.status === "DRAFT" && (
+                {role.status === "DRAFT" && canUpdate && (
                   <button
                     disabled={isPending}
                     onClick={(e) => {
@@ -230,6 +242,7 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
                       startTransition(async () => {
                         const ok = await publishRoleAction(role.roleId);
                         if (ok) applyLocalStatus(role.roleId, "ACTIVE");
+                        else actionFailed();
                       });
                     }}
                     className="p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-bold text-white bg-blue-500 hover:bg-blue-400 disabled:opacity-60"
@@ -256,13 +269,14 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
                       {copiedId === role.roleId ? <Check className="w-4 h-4" /> : <LinkIcon className="w-4 h-4" />}
                       <span className="hidden lg:inline">{copiedId === role.roleId ? t(locale, "roles.dashboard.copied", "Copied!") : t(locale, "roles.management.copyLink", "Copy Link")}</span>
                     </button>
-                    <button
+                    {canUpdate && <button
                       disabled={isPending}
                       onClick={(e) => {
                         e.preventDefault();
                         startTransition(async () => {
                           const ok = await stopRoleAction(role.roleId);
                           if (ok) applyLocalStatus(role.roleId, "CLOSED");
+                          else actionFailed();
                         });
                       }}
                       className="p-2 text-[var(--text-muted)] hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-all flex items-center gap-2 text-xs font-bold disabled:opacity-60"
@@ -270,14 +284,15 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
                     >
                       <StopCircle className="w-4 h-4" />
                       <span className="hidden lg:inline">{t(locale, "roles.management.stop", "Stop")}</span>
-                    </button>
-                    <button
+                    </button>}
+                    {canUpdate && <button
                       disabled={isPending}
                       onClick={(e) => {
                         e.preventDefault();
                         startTransition(async () => {
                           const ok = await cancelRoleAction(role.roleId);
                           if (ok) applyLocalStatus(role.roleId, "CANCELLED");
+                          else actionFailed();
                         });
                       }}
                       className="p-2 text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-all flex items-center gap-2 text-xs font-bold disabled:opacity-60"
@@ -285,11 +300,11 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
                     >
                       <XCircle className="w-4 h-4" />
                       <span className="hidden lg:inline">{t(locale, "roles.management.cancel", "Cancel")}</span>
-                    </button>
+                    </button>}
                   </>
                 )}
 
-                <button
+                {canDelete && <button
                   disabled={isPending}
                   onClick={(e) => {
                     e.preventDefault();
@@ -297,6 +312,7 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
                     startTransition(async () => {
                       const ok = await deleteRoleAction(role.roleId);
                       if (ok) removeLocalRole(role.roleId);
+                      else actionFailed();
                     });
                   }}
                   className="p-2 text-[var(--text-muted)] hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all flex items-center gap-2 text-xs font-bold disabled:opacity-60"
@@ -304,7 +320,7 @@ export default function RolesClient({ initialRoles }: { initialRoles: Role[] }) 
                 >
                   <Trash2 className="w-4 h-4" />
                   <span className="hidden lg:inline">{t(locale, "roles.management.delete", "Delete")}</span>
-                </button>
+                </button>}
 
                 <Link
                   href={rolePath(role.roleId)}

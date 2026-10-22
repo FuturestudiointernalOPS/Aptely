@@ -22,6 +22,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (!backendRes.ok) {
+    // Only a rejected token (400/401) ends the session. Rate limiting or a backend
+    // hiccup (429/5xx) is transient: keep the refresh token so the next try works.
+    if (backendRes.status !== 400 && backendRes.status !== 401) {
+      return NextResponse.json({ error: "Refresh temporarily unavailable" }, { status: 503 });
+    }
     const response = NextResponse.json({ error: "Refresh failed" }, { status: 401 });
     response.headers.set(
       "Set-Cookie",

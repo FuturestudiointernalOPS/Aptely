@@ -4,13 +4,26 @@ import { env } from "@/config/env";
 import mammoth from "mammoth";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Per-document cap on extracted text sent to the model. A CV is a few thousand
+// characters; without a cap one large attachment can blow past the model's input
+// limit and fail the whole candidate's scoring.
+const MAX_DOCUMENT_CHARS = 30_000;
+
+const TEXT_EXTENSIONS = [".txt", ".md", ".csv", ".json"];
+
+function capDocumentText(text: string): string {
+  if (text.length <= MAX_DOCUMENT_CHARS) return text;
+  return `${text.slice(0, MAX_DOCUMENT_CHARS)}\n[… document truncated]`;
+}
+
 async function fetchAndParseDocument(url: string): Promise<string> {
+  // Strip query params for extension check (handles Supabase signed URLs)
+  const urlPath = url.split("?")[0].toLowerCase();
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return "";
 
-    // Strip query params for extension check (handles Supabase signed URLs)
-    const urlPath = url.split("?")[0].toLowerCase();
     const contentType = res.headers.get("content-type") ?? "";
 
     // If it's a PDF
@@ -24,7 +37,7 @@ async function fetchAndParseDocument(url: string): Promise<string> {
         const buffer = await res.arrayBuffer();
         const parser = new PDFParse({ data: Buffer.from(buffer) });
         const result = await parser.getText();
-        return result.text || "";
+        return capDocumentText(result.text || "");
       } catch (pdfErr) {
         console.error("[MATCHING] Failed to parse PDF:", pdfErr);
         return "";
@@ -34,12 +47,23 @@ async function fetchAndParseDocument(url: string): Promise<string> {
     if (urlPath.endsWith(".docx") || contentType.includes("officedocument.wordprocessingml.document")) {
       const buffer = await res.arrayBuffer();
       const data = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
-      return data.value || "";
+      return capDocumentText(data.value || "");
+    }
+    // Plain-text formats only. Anything else (pptx, xlsx, images, archives, legacy
+    // .doc) is binary: reading it as text injects megabytes of garbage into the
+    // prompt, which makes Gemini reject the request and the candidate scores 0.
+    if (
+      contentType.startsWith("text/") ||
+      contentType.includes("json") ||
+      TEXT_EXTENSIONS.some((ext) => urlPath.endsWith(ext))
+    ) {
+      return capDocumentText(await res.text());
     }
 
-    return await res.text();
+    console.warn(`[MATCHING] Skipping unsupported document type (${contentType || "unknown"}): ${urlPath.split("/").pop()}`);
+    return "";
   } catch (err) {
-    console.error("[MATCHING] Failed to parse document from URL:", url, err);
+    console.error("[MATCHING] Failed to parse document:", urlPath.split("/").pop(), err);
     return "";
   }
 }

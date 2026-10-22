@@ -8,7 +8,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { refreshHrSessionIfPossible } from "@/lib/apiHelper";
+import { persistActiveWorkspace, refreshHrSessionIfPossible } from "@/lib/apiHelper";
 import { ROUTES, AUTH_INTERNAL, PROXY_API } from "@/lib/routes";
 
 interface AuthUser {
@@ -59,6 +59,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
     const autoRefreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Drops every client-side trace of the session (httpOnly cookies via server route).
+    const clearLocalSession = useCallback(() => {
+        void fetch(AUTH_INTERNAL.clearCookies, { method: "POST" }).catch(() => {});
+        deleteCookie("user_email");
+        deleteCookie("hr_token_expiry");
+        if (typeof window !== "undefined") localStorage.removeItem("user_institutionId");
+        setUser(null);
+    }, []);
+
     const refreshSessionTokens = useCallback(async (): Promise<{ accessToken: string } | null> => {
         const newToken = await refreshHrSessionIfPossible();
         if (!newToken) return null;
@@ -84,15 +93,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Re-read expiry from cookie (set by /api/auth/refresh)
                 const expiry = getCookie("hr_token_expiry");
                 if (expiry) scheduleTokenRefresh(Number(expiry));
+                return;
+            }
+            // A failed refresh can be transient (rate limit, backend restart). Only end
+            // the session if the backend confirms we are no longer authenticated;
+            // otherwise retry in a minute while the access token is still valid.
+            const me = await fetch(PROXY_API.authMe).catch(() => null);
+            if (me?.status === 401) {
+                clearLocalSession();
             } else {
-                void fetch(AUTH_INTERNAL.clearCookies, { method: "POST" }).catch(() => {});
-                deleteCookie("user_email");
-                deleteCookie("hr_token_expiry");
-                if (typeof window !== "undefined") localStorage.removeItem("user_institutionId");
-                setUser(null);
+                autoRefreshTimerRef.current = setTimeout(() => scheduleTokenRefresh(expiresAt), 60_000);
             }
         }, timeToRefresh);
-    }, []);
+    }, [clearLocalSession]);
 
     // Restore session from cookies and sync with backend on mount
     useEffect(() => {
@@ -146,12 +159,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     } else {
                         localStorage.removeItem("user_institutionId");
                     }
+                } else if (res.status === 401) {
+                    // Access token rejected and refresh failed: the session is really over.
+                    clearLocalSession();
                 } else {
-                    void fetch(AUTH_INTERNAL.clearCookies, { method: "POST" }).catch(() => {});
-                    deleteCookie("user_email");
-                    deleteCookie("hr_token_expiry");
-                    localStorage.removeItem("user_institutionId");
-                    setUser(null);
+                    // 429 / 5xx: the session may still be valid — keep the optimistic
+                    // state instead of logging the user out over a transient error.
+                    console.warn("[AUTH] Session check failed with status", res.status);
                 }
             } catch (err) {
                 console.error("[AUTH] Sync failed", err);
@@ -168,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 clearTimeout(autoRefreshTimerRef.current);
             }
         };
-    }, [refreshSessionTokens, scheduleTokenRefresh]);
+    }, [refreshSessionTokens, scheduleTokenRefresh, clearLocalSession]);
 
     const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; institutionId?: string | null; activeInstitutionId?: string | null; profileRole?: string | null; error?: string }> => {
         try {
@@ -197,12 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const expiresAt: number = data.session?.expiresAt ?? data.session?.expires_at ?? 0;
             const userId: string | null = data.user?.id ?? null;
 
-            if (typeof window !== "undefined") {
-                try {
-                    if (activeInstitutionId) window.localStorage.setItem("aptely_active_workspace", activeInstitutionId);
-                    else window.localStorage.removeItem("aptely_active_workspace");
-                } catch { /* ignore */ }
-            }
+            persistActiveWorkspace(activeInstitutionId);
 
             // Store access token as httpOnly cookie + expiry as readable cookie
             // Must await before navigating — httpOnly cookie must be present for the
@@ -261,8 +270,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         deleteCookie("hr_token_expiry");
         if (typeof window !== "undefined") {
             localStorage.removeItem("user_institutionId");
-            localStorage.removeItem("aptely_active_workspace");
         }
+        persistActiveWorkspace(undefined);
         setUser(null);
     }, []);
 

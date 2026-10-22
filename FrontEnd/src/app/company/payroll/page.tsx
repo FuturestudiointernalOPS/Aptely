@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus, ChevronRight, RefreshCw, Trash2, X, CheckCircle, DollarSign } from "lucide-react";
-import { apiFetch } from "@/lib/apiHelper";
+import { apiFetch, isApiSuccess } from "@/lib/apiHelper";
 import { payrollPeriodsApi, payrollPeriodApi, payrollGenerateApi, payrollEntryApi } from "@/lib/routes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getClientLocale, t } from "@/lib/i18n";
@@ -77,7 +77,7 @@ export default function PayrollPage() {
     setConfirmDeletePeriod(null);
     try {
       const res = await apiFetch(payrollPeriodApi(periodId), "HR") as PeriodDetail | null;
-      if (res) setSelected(res);
+      if (isApiSuccess(res)) setSelected(res);
     } finally {
       setDetailLoading(false);
     }
@@ -89,7 +89,7 @@ export default function PayrollPage() {
       method: "POST",
       body: JSON.stringify({ period_month: newPeriod.month, period_year: newPeriod.year }),
     }) as PayrollPeriod | null;
-    if (res) {
+    if (isApiSuccess(res) && res) {
       setCreating(false);
       await loadPeriods();
       void loadDetail(res.id);
@@ -114,7 +114,7 @@ export default function PayrollPage() {
       method: "PATCH",
       body: JSON.stringify({ status: nextStatus }),
     }) as PayrollPeriod | null;
-    if (res) {
+    if (isApiSuccess(res) && res) {
       setSelected({ ...selected, status: res.status });
       setPeriods((prev) => prev.map((p) => p.id === selected.id ? { ...p, status: res!.status } : p));
     }

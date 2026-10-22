@@ -13,6 +13,7 @@ import {
   ALL_PERMISSIONS,
   DEFAULT_PERMISSIONS,
   expandAliases,
+  roleRank,
 } from "@/middleware/permissions.middleware";
 import {
   getMembershipStatus,
@@ -78,6 +79,48 @@ async function rotateInviteIfStale(invite: InviteRow, institutionId: string, cre
 
   if (error || !created) throw new AppError(500, "Failed to rotate invite link");
   return created as InviteRow;
+}
+
+/** Legacy membership status that goes with a role (OWNER→OWNER, ADMIN→ADMIN, else ACTIVE). */
+function statusForRole(role: string): "OWNER" | "ADMIN" | "ACTIVE" {
+  return role === "OWNER" ? "OWNER" : role === "ADMIN" ? "ADMIN" : "ACTIVE";
+}
+
+/**
+ * Sets the legacy profiles.institution_id only when the user has none, so managing a
+ * member here never silently moves someone whose primary workspace is elsewhere.
+ */
+async function linkProfileIfUnbound(userId: string, institutionId: string): Promise<void> {
+  await supabaseAdmin.from("profiles").update({ role: "HR" }).eq("id", userId);
+  await supabaseAdmin
+    .from("profiles")
+    .update({ institution_id: institutionId })
+    .eq("id", userId)
+    .is("institution_id", null);
+}
+
+// Built-in roles an invite may carry. OWNER is only obtainable through
+// transfer-ownership; CUSTOM needs a custom role id, which invites don't carry.
+const INVITABLE_ROLES = ["ADMIN", "HR_LEAD", "STANDARD_HR", "HIRING_MANAGER", "RECRUITER", "MEMBER"];
+
+/**
+ * An invite grants its role to whoever opens it, so creating (or regenerating) a
+ * role-scoped invite is the same as assigning that role: the actor must strictly
+ * outrank it, exactly like PATCH /members/:userId/role-specialization.
+ */
+async function assertCanInviteAs(
+  actorId: string,
+  institutionId: string,
+  role: string | null | undefined
+): Promise<void> {
+  if (!role) return;
+  if (!INVITABLE_ROLES.includes(role)) throw new AppError(422, "Invalid invitation role");
+  const actor = await getEffectiveRole(actorId, institutionId, supabaseAdmin);
+  if (!actor) throw new AppError(403, "You are not a member of this institution");
+  const actorRank = await rankOf(actor.role, actor.customRoleId, institutionId, supabaseAdmin);
+  if (actorRank <= roleRank(role)) {
+    throw new AppError(403, "You cannot invite someone at or above your own rank");
+  }
 }
 
 // ─── POST /institution/create ─────────────────────────────────────────────────
@@ -295,11 +338,11 @@ export const getInstitution = asyncHandler(
 
 export const updateInstitution = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const userId = req.user!.id;
     const institutionId = req.user!.institutionId;
     if (!institutionId) throw new AppError(403, "You are not linked to any institution");
-
-    await assertOwner(userId, institutionId, supabaseAdmin);
+    // Access is the route's requirePermission("settings.edit") — granted to OWNER and
+    // ADMIN by default. An extra owner-only check here made the settings form (and
+    // the logo/department/webhook settings it sits next to) fail for admins.
 
     const body = req.body as UpdateInstitutionInput;
     const updates: Record<string, unknown> = {};
@@ -316,7 +359,7 @@ export const updateInstitution = asyncHandler(
       throw new AppError(422, "No fields to update");
     }
 
-    // Use service role for the write; ownership is already enforced via assertOwner.
+    // Use service role for the write; access is enforced by the route permission.
     const { data, error } = await supabaseAdmin
       .from("institutions")
       .update(updates)
@@ -469,7 +512,12 @@ export const leaveInstitution = asyncHandler(
 
     if (deleteError) throw new AppError(500, "Failed to leave institution");
 
-    await supabaseAdmin.from("profiles").update({ institution_id: null }).eq("id", userId);
+    // Only unbind the legacy primary institution if it is the one being left.
+    await supabaseAdmin
+      .from("profiles")
+      .update({ institution_id: null })
+      .eq("id", userId)
+      .eq("institution_id", institutionId);
 
     clearAuthCache(userId);
 
@@ -581,16 +629,12 @@ export const handleJoinRequest = asyncHandler(
 
     if (action === "ACCEPT") {
       // Service role needed — updating another user's profile
-      const { error: updateProfileError } = await supabaseAdmin
-        .from("profiles")
-        .update({ institution_id: institutionId, role: "HR" })
-        .eq("id", targetUserId);
+      await linkProfileIfUnbound(targetUserId, institutionId);
 
-      if (updateProfileError) throw new AppError(500, "Failed to link user to institution");
-
+      // Pending rows carry no role; give the canonical MEMBER role like invite joins do.
       const { error: updateMemberError } = await supabaseAdmin
         .from("institution_members")
-        .update({ status: "ACTIVE" })
+        .update({ status: "ACTIVE", role_specialization: "MEMBER" })
         .eq("id", joinReq.id);
 
       if (updateMemberError) throw new AppError(500, "Failed to add user to institution members");
@@ -642,39 +686,43 @@ export const updateMemberStatus = asyncHandler(
     const institutionId = req.user!.institutionId;
     if (!institutionId) throw new AppError(403, "You are not linked to any institution");
 
-    const targetStatus = await getMembershipStatus(userId, institutionId, supabaseAdmin);
-    if (!targetStatus) throw new AppError(404, "Membership not found");
+    const target = await getEffectiveRole(userId, institutionId, supabaseAdmin);
+    if (!target) throw new AppError(404, "Membership not found");
 
-    if (targetStatus === "OWNER") {
+    if (target.status === "OWNER") {
       throw new AppError(403, "Owner status can only be changed through role management");
+    }
+    if (target.status === "PENDING") {
+      throw new AppError(422, "Pending join requests must be accepted or rejected");
     }
     // Rank guard: actor must strictly outrank the target (permission gated at route).
     await assertRankAuthority(currentUserId, userId, institutionId, supabaseAdmin);
 
+    // Reactivating restores the status that matches the member's role — an ADMIN
+    // must come back as ADMIN, not as a plain ACTIVE member.
+    const nextStatus = status === "SUSPENDED" ? "SUSPENDED" : statusForRole(target.role);
+
     // Service role needed — modifies another user's membership + profile
     const { error } = await supabaseAdmin
       .from("institution_members")
-      .update({ status })
+      .update({ status: nextStatus })
       .eq("user_id", userId)
       .eq("institution_id", institutionId);
 
     if (error) throw new AppError(500, "Failed to update member status");
 
-    if (status === "SUSPENDED") {
+    if (nextStatus === "SUSPENDED") {
       await supabaseAdmin
         .from("profiles")
         .update({ institution_id: null })
         .eq("id", userId)
         .eq("institution_id", institutionId);
     } else {
-      await supabaseAdmin
-        .from("profiles")
-        .update({ institution_id: institutionId, role: "HR" })
-        .eq("id", userId);
+      await linkProfileIfUnbound(userId, institutionId);
     }
 
     clearAuthCache(userId);
-    res.status(200).json({ userId, status });
+    res.status(200).json({ userId, status: nextStatus });
   }
 );
 
@@ -704,7 +752,8 @@ export const updateMemberRole = asyncHandler(
       if (owners <= 1) throw new AppError(409, "You cannot demote the only OWNER.");
     }
 
-    const newStatus = role === "OWNER" ? "OWNER" : role === "ADMIN" ? "ADMIN" : "ACTIVE";
+    // A role change must not lift a suspension.
+    const newStatus = targetStatus === "SUSPENDED" ? "SUSPENDED" : statusForRole(role);
     const { error } = await supabaseAdmin
       .from("institution_members")
       .update({ status: newStatus, role_specialization: role })
@@ -713,10 +762,7 @@ export const updateMemberRole = asyncHandler(
 
     if (error) throw new AppError(500, "Failed to update member role");
 
-    await supabaseAdmin
-      .from("profiles")
-      .update({ institution_id: institutionId, role: "HR" })
-      .eq("id", targetUserId);
+    if (newStatus !== "SUSPENDED") await linkProfileIfUnbound(targetUserId, institutionId);
 
     clearAuthCache(targetUserId);
     res.status(200).json({ userId: targetUserId, role });
@@ -764,10 +810,9 @@ const LOGO_EXTS = ["jpg", "jpeg", "png", "webp"];
 
 export const presignLogoUpload = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const currentUserId = req.user!.id;
+    // Access: route-level requirePermission("settings.edit").
     const institutionId = resolveInstitutionId(req);
     if (!institutionId) throw new AppError(403, "You are not linked to any institution");
-    await assertManager(currentUserId, institutionId, supabaseAdmin);
 
     const { fileName } = req.body as { fileName?: string };
     if (!fileName || typeof fileName !== "string") {
@@ -790,10 +835,9 @@ export const presignLogoUpload = asyncHandler(
 
 export const setLogo = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const currentUserId = req.user!.id;
+    // Access: route-level requirePermission("settings.edit").
     const institutionId = resolveInstitutionId(req);
     if (!institutionId) throw new AppError(403, "You are not linked to any institution");
-    await assertManager(currentUserId, institutionId, supabaseAdmin);
 
     const { path } = req.body as { path?: string };
     if (!path || typeof path !== "string") throw new AppError(400, "path is required");
@@ -815,10 +859,9 @@ export const setLogo = asyncHandler(
 
 export const deleteLogo = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const currentUserId = req.user!.id;
+    // Access: route-level requirePermission("settings.edit").
     const institutionId = resolveInstitutionId(req);
     if (!institutionId) throw new AppError(403, "You are not linked to any institution");
-    await assertManager(currentUserId, institutionId, supabaseAdmin);
 
     const { data: institution } = await supabaseAdmin
       .from("institutions")
@@ -937,11 +980,7 @@ export const createInviteLink = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const user = req.user!;
     if (!user.institutionId) throw new AppError(403, "You are not linked to any institution");
-
-    const membership = await getMembershipStatus(user.id, user.institutionId, supabaseAdmin);
-    if (!membership || !["OWNER", "ADMIN"].includes(membership)) {
-      throw new AppError(403, "Only OWNER or ADMIN can create invite links");
-    }
+    // Access: route-level requirePermission("members.invite").
 
     const { data: institution } = await supabaseAdmin
       .from("institutions")
@@ -962,6 +1001,17 @@ export const createInviteLink = asyncHandler(
       jobPositionId?: string;
       customLabel?: string;
     };
+
+    await assertCanInviteAs(user.id, user.institutionId, roleSpecialization);
+    if (jobPositionId) {
+      const { data: position } = await supabaseAdmin
+        .from("job_positions")
+        .select("id")
+        .eq("id", jobPositionId)
+        .eq("institution_id", user.institutionId)
+        .maybeSingle();
+      if (!position) throw new AppError(404, "Job position not found");
+    }
 
     // Each role+position combo gets its own token (never reuse across roles)
     let query = supabaseAdmin
@@ -1139,10 +1189,7 @@ export const revokeInvite = asyncHandler(
     const user = req.user!;
     if (!user.institutionId) throw new AppError(403, "You are not linked to any institution");
 
-    const membership = await getMembershipStatus(user.id, user.institutionId, supabaseAdmin);
-    if (!membership || !["OWNER", "ADMIN"].includes(membership)) {
-      throw new AppError(403, "Only OWNER or ADMIN can revoke invite links");
-    }
+    // Access: route-level requirePermission("members.invite").
 
     const { id } = req.params;
     const { error } = await supabaseAdmin
@@ -1161,10 +1208,7 @@ export const regenerateInvite = asyncHandler(
     const user = req.user!;
     if (!user.institutionId) throw new AppError(403, "You are not linked to any institution");
 
-    const membership = await getMembershipStatus(user.id, user.institutionId, supabaseAdmin);
-    if (!membership || !["OWNER", "ADMIN"].includes(membership)) {
-      throw new AppError(403, "Only OWNER or ADMIN can regenerate invite links");
-    }
+    // Access: route-level requirePermission("members.invite").
 
     const { id } = req.params;
 
@@ -1178,6 +1222,8 @@ export const regenerateInvite = asyncHandler(
       .single();
 
     if (fetchErr || !existing) throw new AppError(404, "Active invite not found");
+    // Regenerating hands out a fresh token carrying the same role.
+    await assertCanInviteAs(user.id, user.institutionId, existing.role_specialization as string | null);
 
     // Revoke the old token
     await supabaseAdmin
@@ -1285,7 +1331,9 @@ export const joinByInvite = asyncHandler(
     if (error || !invite) throw new AppError(404, "Invalid or revoked invite link");
 
     const institutionId = invite.institution_id;
-    const inviteRole = (invite as any).role_specialization ?? null;
+    // Never honour a role an invite may not carry (e.g. legacy OWNER-scoped rows).
+    const rawInviteRole = ((invite as any).role_specialization as string | null) ?? null;
+    const inviteRole = rawInviteRole && INVITABLE_ROLES.includes(rawInviteRole) ? rawInviteRole : null;
     const inviteJobPositionId = (invite as any).job_position_id ?? null;
 
     // Check not already a member
@@ -1297,7 +1345,8 @@ export const joinByInvite = asyncHandler(
       .maybeSingle();
 
     const memberFields = {
-      status: "ACTIVE" as const,
+      // ADMIN invites must land with the ADMIN status (manager checks read it).
+      status: statusForRole(inviteRole || "MEMBER"),
       // Canonical (no-role) invites default the member to MEMBER. Without this the
       // column stays null and role resolution falls back to the status "ACTIVE",
       // which is not a valid RBAC rank. Role-scoped invites keep their role.
@@ -1423,6 +1472,15 @@ export const updateRolePermissions = asyncHandler(
         400,
         `Cannot configure permissions for "${role}". Editable roles: ${EDITABLE_ROLES.join(", ")}`
       );
+    }
+
+    // Same rank rule as custom roles: only strictly lower roles can be configured, so
+    // an ADMIN cannot rewrite the ADMIN role (its own and its peers' permissions).
+    const actor = await getEffectiveRole(user.id, user.institutionId, supabaseAdmin);
+    if (!actor) throw new AppError(403, "You are not a member of this institution");
+    const actorRank = await rankOf(actor.role, actor.customRoleId, user.institutionId, supabaseAdmin);
+    if (actorRank <= roleRank(role)) {
+      throw new AppError(403, "You cannot configure a role at or above your own rank");
     }
 
     const permissions = req.body as Record<string, boolean>;
@@ -1683,13 +1741,13 @@ export const deleteCustomRole = asyncHandler(
       .eq("institution_id", institutionId)
       .eq("custom_role_id", id);
 
+    // Status is left untouched so suspended members stay suspended.
     await supabaseAdmin
       .from("institution_members")
       .update({
         role_specialization: "MEMBER",
         custom_role_id: null,
         role_custom_label: null,
-        status: "ACTIVE",
       })
       .eq("institution_id", institutionId)
       .eq("custom_role_id", id);
@@ -1743,6 +1801,9 @@ export const updateMemberRoleSpecialization = asyncHandler(
     if (target.status === "OWNER") {
       throw new AppError(400, "Cannot change the owner's role. Transfer ownership first.");
     }
+    if (target.status === "PENDING") {
+      throw new AppError(422, "Cannot assign a role while the join request is pending");
+    }
 
     // Rank guard: actor must outrank the target AND the role being assigned.
     await assertRankAuthority(
@@ -1772,6 +1833,8 @@ export const updateMemberRoleSpecialization = asyncHandler(
     } else if (roleSpecialization === "ADMIN") {
       status = "ADMIN";
     }
+    // A role change must not lift a suspension.
+    if (target.status === "SUSPENDED") status = "SUSPENDED";
 
     const { error } = await supabaseAdmin
       .from("institution_members")
@@ -1810,7 +1873,8 @@ export const getMyMemberships = asyncHandler(
       `
       )
       .eq("user_id", userId)
-      .neq("status", "SUSPENDED")
+      // Pending join requests are not usable workspaces (every call would be denied).
+      .in("status", ["OWNER", "ADMIN", "ACTIVE"])
       .order("joined_at", { ascending: false });
 
     if (error) throw new AppError(500, "Failed to load memberships");

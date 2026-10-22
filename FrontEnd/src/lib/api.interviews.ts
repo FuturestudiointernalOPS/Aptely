@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiHelper";
+import { apiFetch, isApiSuccess } from "./apiHelper";
 import type {
   CandidateInterviewHistoryEnrichedItem,
   DebriefAnswer,
@@ -448,7 +448,7 @@ export async function relaunchApplicationMatching(applicationId: string): Promis
     const res = await apiFetch(mkApiPath(`/applications/${applicationId}/relaunch-matching`), "HR", {
       method: "POST",
     });
-    return !!res;
+    return isApiSuccess(res);
   } catch (err) {
     console.error("Failed to relaunch application matching", err);
     return false;
