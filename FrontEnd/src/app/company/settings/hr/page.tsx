@@ -21,7 +21,7 @@ import {
 } from "@/lib/api";
 import { useAuth, useRequireInstitution } from "@/lib/auth";
 import { roleRank, useWorkspace } from "@/lib/workspace";
-import { apiFetch } from "@/lib/apiHelper";
+import { apiFetch, isApiSuccess } from "@/lib/apiHelper";
 import { getClientLocale, t } from "@/lib/i18n";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/Button";
@@ -247,7 +247,7 @@ export default function TeamManagementPage() {
         method: "POST",
         body: JSON.stringify(buildInvitePayload(targetEmail)),
       });
-      if (!res) throw new Error("no response");
+      if (!isApiSuccess(res)) throw new Error((res as { error?: string } | null)?.error ?? "no response");
       const inviteUrl = res.inviteUrl || res.data?.inviteUrl;
       setFeedback({
         type: "success",
@@ -1335,24 +1335,35 @@ export default function TeamManagementPage() {
                     "Employé (accès de base)",
                   )}
                 </option>
-                <option value="RECRUITER">
-                  {translate("institution.hr.role.recruiter", "Recruteur")}
-                </option>
-                <option value="HIRING_MANAGER">
-                  {translate(
-                    "institution.hr.role.hiringManager",
-                    "Hiring Manager",
-                  )}
-                </option>
-                <option value="STANDARD_HR">
-                  {translate("institution.hr.role.standardHr", "RH Standard")}
-                </option>
-                <option value="HR_LEAD">
-                  {translate("institution.hr.role.hrLead", "Responsable RH")}
-                </option>
-                <option value="ADMIN">
-                  {translate("institution.hr.role.admin", "Administrateur")}
-                </option>
+                {/* Only roles strictly below the inviter's rank (the backend enforces it). */}
+                {assignableRoles.includes("RECRUITER") && (
+                  <option value="RECRUITER">
+                    {translate("institution.hr.role.recruiter", "Recruteur")}
+                  </option>
+                )}
+                {assignableRoles.includes("HIRING_MANAGER") && (
+                  <option value="HIRING_MANAGER">
+                    {translate(
+                      "institution.hr.role.hiringManager",
+                      "Hiring Manager",
+                    )}
+                  </option>
+                )}
+                {assignableRoles.includes("STANDARD_HR") && (
+                  <option value="STANDARD_HR">
+                    {translate("institution.hr.role.standardHr", "RH Standard")}
+                  </option>
+                )}
+                {assignableRoles.includes("HR_LEAD") && (
+                  <option value="HR_LEAD">
+                    {translate("institution.hr.role.hrLead", "Responsable RH")}
+                  </option>
+                )}
+                {assignableRoles.includes("ADMIN") && (
+                  <option value="ADMIN">
+                    {translate("institution.hr.role.admin", "Administrateur")}
+                  </option>
+                )}
               </Select>
             </FormField>
 

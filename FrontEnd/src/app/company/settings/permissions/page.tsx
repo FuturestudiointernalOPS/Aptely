@@ -26,7 +26,7 @@ import {
   type RolePermissionsMap,
 } from "@/lib/api";
 import { useAuth, useRequireInstitution } from "@/lib/auth";
-import { useWorkspace } from "@/lib/workspace";
+import { roleRank, useWorkspace } from "@/lib/workspace";
 import { getClientLocale, t } from "@/lib/i18n";
 import { ROUTES } from "@/lib/routes";
 import Modal from "@/components/ui/Modal";
@@ -160,6 +160,19 @@ export default function PermissionsMatrixPage() {
   // Editing the permission matrix requires members.roles (OWNER/ADMIN by default).
   const canEditPermissions = hasPermission("members.roles");
 
+  // Rank rule (mirrors the backend): only roles strictly below the actor's rank can be
+  // configured — an ADMIN cannot rewrite the ADMIN role, i.e. its own permissions.
+  const actorRank = useMemo(() => {
+    const spec = currentMember?.roleSpecialization ?? currentMember?.membershipStatus ?? null;
+    if (spec === "CUSTOM") {
+      return customRoles.find((r) => r.id === currentMember?.customRoleId)?.rank ?? roleRank("CUSTOM");
+    }
+    return roleRank(spec);
+  }, [currentMember, customRoles]);
+  const canEditRole = (role: string) =>
+    canEditPermissions && role !== "OWNER" && roleRank(role) < actorRank;
+  const canEditCustomRole = (rank: number) => canEditPermissions && rank < actorRank;
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -194,7 +207,7 @@ export default function PermissionsMatrixPage() {
     role === "OWNER" ? true : Boolean(matrix[role]?.[perm]);
 
   const togglePerm = (role: string, perm: string) => {
-    if (!canEditPermissions || role === "OWNER") return;
+    if (!canEditRole(role)) return;
     setMatrix((prev) => ({
       ...prev,
       [role]: { ...(prev[role] ?? {}), [perm]: !prev[role]?.[perm] },
@@ -203,7 +216,7 @@ export default function PermissionsMatrixPage() {
   };
 
   const handleSavePerms = async (role: string) => {
-    if (!canEditPermissions || role === "OWNER") return;
+    if (!canEditRole(role)) return;
     setSavingRole(role);
     const ok = await updateRolePermissions(role, matrix[role] ?? {});
     if (!ok) {
@@ -374,12 +387,12 @@ export default function PermissionsMatrixPage() {
                         key={perm.key}
                         type="button"
                         onClick={() => togglePerm(selectedRole, perm.key)}
-                        disabled={!canEditPermissions}
+                        disabled={!canEditRole(selectedRole)}
                         className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-left text-sm transition-colors ${
                           checked
                             ? "border-[var(--accent)]/30 bg-[var(--accent-dim)]"
                             : "border-[var(--border)] bg-[var(--bg-raised)]"
-                        } ${canEditPermissions ? "hover:border-[var(--accent)]/40" : "opacity-80 cursor-not-allowed"}`}
+                        } ${canEditRole(selectedRole) ? "hover:border-[var(--accent)]/40" : "opacity-80 cursor-not-allowed"}`}
                       >
                         <span className={checked ? "text-[var(--accent)] font-medium" : "text-[var(--text-secondary)]"}>
                           {translate(`perm.label.${perm.key}`, perm.fallback)}
@@ -398,7 +411,12 @@ export default function PermissionsMatrixPage() {
               </div>
             ))}
 
-            {canEditPermissions && (
+            {canEditPermissions && !canEditRole(selectedRole) && (
+              <p className="text-xs text-[var(--text-muted)] pt-2">
+                {translate("perm.editor.rankReadOnly", "Lecture seule — vous ne pouvez pas modifier un rôle de rang égal ou supérieur au vôtre.")}
+              </p>
+            )}
+            {canEditRole(selectedRole) && (
               <div className="flex items-center justify-end gap-3 pt-2">
                 {dirtyRoles.has(selectedRole) && (
                   <span className="text-xs text-[var(--text-muted)]">{translate("perm.editor.unsaved", "Modifications non enregistrées")}</span>
@@ -469,11 +487,13 @@ export default function PermissionsMatrixPage() {
                 <input
                   type="number"
                   min={1}
-                  max={99}
+                  max={Math.min(99, actorRank - 1)}
                   value={editingRole.rank}
                   onChange={(e) => {
                     const n = parseInt(e.target.value, 10);
-                    setEditingRole((p) => (p ? { ...p, rank: Number.isFinite(n) ? Math.min(99, Math.max(1, n)) : 1 } : p));
+                    // A custom role must stay strictly below the editor's own rank.
+                    const maxRank = Math.max(1, Math.min(99, actorRank - 1));
+                    setEditingRole((p) => (p ? { ...p, rank: Number.isFinite(n) ? Math.min(maxRank, Math.max(1, n)) : 1 } : p));
                   }}
                   className="w-24 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)]/50"
                 />
@@ -553,7 +573,7 @@ export default function PermissionsMatrixPage() {
                     {translate("perm.custom.membersCount", "membres")} · {translate("perm.custom.rank", "Rang")} {role.rank}
                   </p>
                 </div>
-                {canEditPermissions && (
+                {canEditCustomRole(role.rank) && (
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button
                       type="button"

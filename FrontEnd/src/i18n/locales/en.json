@@ -971,7 +971,7 @@
   "candidates.interviews.new.backHistory": "Back to history",
   "candidates.interviews.new.backInterviewHistory": "Back to interview history",
   "common.saving": "Saving...",
-  "institution.settings.ownerOnlyWorkspace": "Only institution owners can edit workspace settings. Your personal settings remain available in the Personal tab.",
+  "institution.settings.ownerOnlyWorkspace": "You don't have permission to edit workspace settings. Your personal settings remain available in the Personal tab.",
   "institution.settings.noWorkspaceChanges": "No workspace changes to save.",
   "institution.settings.workspaceSaved": "Workspace settings updated successfully.",
   "institution.settings.workspaceSavedActivity": "Workspace settings saved",
@@ -1022,10 +1022,10 @@
   "institution.settings.currentMembership": "Current membership status",
   "institution.settings.unknown": "UNKNOWN",
   "institution.settings.canEdit": "You can edit and save institution settings.",
-  "institution.settings.readOnly": "You can view workspace settings, but only owners can edit them.",
+  "institution.settings.readOnly": "You can view workspace settings, but not edit them (settings permission required).",
   "institution.settings.owners": "Owners",
   "institution.settings.changedFields": "Changed fields",
-  "institution.settings.controlsOwner": "Institution controls (Owner)",
+  "institution.settings.controlsOwner": "Institution controls",
   "institution.settings.field.institutionName": "Institution Name",
   "institution.settings.field.website": "Website",
   "institution.settings.field.sector": "Sector",
@@ -4409,5 +4409,7 @@
   "admin.institutions.deleteMessage": "and all its data (members, job postings, applications) will be deleted. This action is irreversible.",
   "admin.institutions.cancel": "Cancel",
   "session.recovery.failedTitle": "Unable to load this page",
-  "session.recovery.failedDesc": "Your session is active but the server is not responding. Please try again in a moment."
+  "session.recovery.failedDesc": "Your session is active but the server is not responding. Please try again in a moment.",
+  "perm.editor.rankReadOnly": "Read only — you cannot edit a role at or above your own rank.",
+  "institution.settings.workspaceSaveFailed": "Unable to save workspace settings."
 }
