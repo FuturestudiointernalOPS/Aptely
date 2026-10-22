@@ -4271,6 +4271,7 @@
 
   "admin.backToSpace": "Back to workspace",
   "admin.nav.entry": "Administration",
+  "admin.badge.platformAdmin": "Platform admin",
   "admin.nav.subtitle": "Platform control",
   "admin.nav.overview": "Overview",
   "admin.nav.users": "Users",

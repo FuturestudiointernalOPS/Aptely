@@ -4271,6 +4271,7 @@
 
   "admin.backToSpace": "Retour à l'espace",
   "admin.nav.entry": "Administration",
+  "admin.badge.platformAdmin": "Admin plateforme",
   "admin.nav.subtitle": "Contrôle de la plateforme",
   "admin.nav.overview": "Vue d'ensemble",
   "admin.nav.users": "Utilisateurs",

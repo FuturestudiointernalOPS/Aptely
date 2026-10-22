@@ -66,13 +66,20 @@ function LoginForm() {
                 return;
             }
 
+            const hasActiveInstitution = Boolean(result.activeInstitutionId ?? result.institutionId);
+            // Platform admins without a company have no company workspace; land them on
+            // the platform overview even if a stale redirect points at the candidate space.
+            if (result.isSuperAdmin && !hasActiveInstitution) {
+                router.push(ROUTES.admin.root);
+                return;
+            }
+
             const requestedRedirect = searchParams.get("redirect") || searchParams.get("from") || "";
             if (requestedRedirect && requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//")) {
                 router.push(requestedRedirect);
                 return;
             }
 
-            const hasActiveInstitution = Boolean(result.activeInstitutionId ?? result.institutionId);
             if (hasActiveInstitution) {
                 router.push(ROUTES.company.dashboard);
             } else if (result.profileRole === "HR") {

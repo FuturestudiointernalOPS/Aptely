@@ -73,6 +73,9 @@ export default function AuthCallbackPage() {
 
                     if (postLoginRedirect) {
                         window.location.href = postLoginRedirect;
+                    } else if (resolvedData.isSuperAdmin && !resolvedData.institutionId) {
+                        // Platform admins without a company land on the platform overview.
+                        window.location.href = ROUTES.admin.root;
                     } else if (resolvedData.institutionId) {
                         window.location.href = ROUTES.company.dashboard;
                     } else {

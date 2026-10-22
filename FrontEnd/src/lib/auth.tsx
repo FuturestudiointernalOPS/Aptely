@@ -26,7 +26,7 @@ interface AuthUser {
 interface AuthContextValue {
     user: AuthUser | null;
     loading: boolean;
-    login: (email: string, password: string) => Promise<{ success: boolean; institutionId?: string | null; activeInstitutionId?: string | null; profileRole?: string | null; error?: string }>;
+    login: (email: string, password: string) => Promise<{ success: boolean; institutionId?: string | null; activeInstitutionId?: string | null; profileRole?: string | null; isSuperAdmin?: boolean; error?: string }>;
     logout: () => void;
     setInstitutionId: (institutionId: string | null) => void;
     setAvatarUrl: (avatarUrl: string | null) => void;
@@ -170,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, [refreshSessionTokens, scheduleTokenRefresh]);
 
-    const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; institutionId?: string | null; activeInstitutionId?: string | null; profileRole?: string | null; error?: string }> => {
+    const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; institutionId?: string | null; activeInstitutionId?: string | null; profileRole?: string | null; isSuperAdmin?: boolean; error?: string }> => {
         try {
             const res = await fetch(PROXY_API.authLogin, {
                 method: "POST",
@@ -234,7 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser({ email, token, userId, institutionId, fullName: data.user?.fullName ?? null, avatarUrl: data.user?.avatarUrl ?? null, isSuperAdmin: Boolean(data.user?.isSuperAdmin) });
 
             if (expiresAt) scheduleTokenRefresh(expiresAt);
-            return { success: true, institutionId, activeInstitutionId, profileRole };
+            return { success: true, institutionId, activeInstitutionId, profileRole, isSuperAdmin: Boolean(data.user?.isSuperAdmin) };
         } catch (err) {
             // Only reaches here when the backend is unreachable (server down, CORS, etc.)
             console.error("[Auth] Login network error:", err);

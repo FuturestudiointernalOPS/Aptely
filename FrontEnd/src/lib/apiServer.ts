@@ -20,7 +20,11 @@ export type InstitutionInterviewServerItem = {
   meetingLocation: string | null;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+// Server components run in Node, so they cannot rely on the browser proxy's fallback.
+// Without this, a missing NEXT_PUBLIC_API_URL makes getMeServer() return null and every
+// authenticated page redirects to /login even though the cookie is valid.
+const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") ??
+  (process.env.NODE_ENV !== "production" ? "http://localhost:4000" : undefined);
 
 // Base URL of the frontend app (used to build full share links server-side)
 // Must be set in .env: NEXT_PUBLIC_APP_URL=https://yourdomain.com

@@ -456,7 +456,11 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
                 {!isCollapsed && user && (
                     <div className="px-3 py-2 mb-1">
                         <p className="text-xs text-[var(--text-muted)] truncate">{user.email}</p>
-                        {isPersonal ? (
+                        {isPersonal && user.isSuperAdmin ? (
+                            <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider bg-[var(--accent-dim)] text-[var(--accent)]">
+                                {translate("admin.badge.platformAdmin", "Admin plateforme")}
+                            </span>
+                        ) : isPersonal ? (
                             <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider bg-blue-400/15 text-blue-400">
                                 Candidat
                             </span>
