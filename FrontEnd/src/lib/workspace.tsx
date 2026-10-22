@@ -156,8 +156,13 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     setLoading(true);
     const { apiFetch } = await import("@/lib/apiHelper");
 
-    // Memberships first (which workspaces I belong to).
-    const res = await apiFetch(institutionMembershipsApi, "HR", { method: "GET" });
+    // Memberships first (which workspaces I belong to). Retry once — a transient
+    // blip during token refresh must not flip the UI to personal/candidate.
+    let res = await apiFetch(institutionMembershipsApi, "HR", { method: "GET" });
+    if (!(res && typeof res === "object" && Array.isArray(res.memberships))) {
+      await new Promise((r) => setTimeout(r, 400));
+      res = await apiFetch(institutionMembershipsApi, "HR", { method: "GET" });
+    }
     if (res && typeof res === "object" && Array.isArray(res.memberships)) {
       setMemberships(res.memberships);
       if (res.personal_workspace?.name) setPersonalLabel(res.personal_workspace.name);
@@ -178,10 +183,16 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
         ) ?? res.memberships[0];
         setActiveId(preferred.institution_id);
         writeStoredWorkspace(preferred.institution_id);
+      } else if (user.institutionId) {
+        setActiveId(user.institutionId);
+        writeStoredWorkspace(user.institutionId);
       } else {
         setActiveId(null);
         writeStoredWorkspace(null);
       }
+    } else if (user.institutionId) {
+      // Keep last-known institution context on API failure (do not wipe to personal)
+      setActiveId((prev) => prev ?? user.institutionId ?? null);
     }
 
     // Permissions + modules for the active workspace (parallel).
@@ -241,15 +252,34 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   }, [user]);
 
   const active: ActiveWorkspace = useMemo(() => {
-    if (activeId === null) {
+    const fallbackId = activeId ?? user?.institutionId ?? null;
+    if (fallbackId === null) {
       return { kind: "personal", label: personalLabel };
     }
-    const membership = memberships.find((m) => m.institution_id === activeId);
+    const membership = memberships.find((m) => m.institution_id === fallbackId);
     if (!membership) {
+      // While loading, or if memberships failed to hydrate, keep institution mode so
+      // /company/* pages do not flash the candidate sidebar (isPersonal).
+      if (loading || user?.institutionId === fallbackId || activeId === fallbackId) {
+        return {
+          kind: "institution",
+          institutionId: fallbackId,
+          membership: {
+            institution_id: fallbackId,
+            institution_name: "",
+            institution_logo_url: null,
+            institution_sector: null,
+            status: "ACTIVE",
+            role_specialization: null,
+            role_custom_label: null,
+            joined_at: new Date(0).toISOString(),
+          },
+        };
+      }
       return { kind: "personal", label: personalLabel };
     }
-    return { kind: "institution", institutionId: activeId, membership };
-  }, [activeId, memberships, personalLabel]);
+    return { kind: "institution", institutionId: fallbackId, membership };
+  }, [activeId, memberships, personalLabel, loading, user?.institutionId]);
 
   const hasPermission = useCallback(
     (perm: Permission) => permissions.has(perm),

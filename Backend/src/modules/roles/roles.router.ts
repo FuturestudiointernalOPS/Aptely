@@ -45,7 +45,7 @@ router.get("/", validateQuery(listRolesQuerySchema), listRoles);
  * @desc    Créer un nouveau rôle (statut DRAFT par défaut)
  * @access  HR
  */
-router.post("/", validate(createRoleSchema), createRole);
+router.post("/", requirePermission("roles.create"), validate(createRoleSchema), createRole);
 
 /**
  * @route   GET /roles/:id

@@ -96,8 +96,8 @@ export default function AnalyticsPage() {
     );
   }
 
-  const maxDeptCount = Math.max(...(headcount?.byDepartment.map((d) => d.count) ?? [1]), 1);
-  const maxHireCount = Math.max(...(headcount?.monthlyHires.map((m) => m.count) ?? [1]), 1);
+  const maxDeptCount = Math.max(...(headcount?.byDepartment?.map((d) => d.count) ?? [1]), 1);
+  const maxHireCount = Math.max(...(headcount?.monthlyHires?.map((m) => m.count) ?? [1]), 1);
 
   const funnelSteps = funnel
     ? [
@@ -124,7 +124,7 @@ export default function AnalyticsPage() {
         <Stat icon={<Users size={16} />} label={t(locale, "analytics.headcount.active", "Actifs")} value={String(headcount?.active ?? "—")} accent />
         <Stat icon={<TrendingDown size={16} />} label={t(locale, "analytics.turnover.rate", "Turnover (12 mois)")} value={headcount !== null ? `${turnover?.turnoverRatePct ?? 0}%` : "—"} />
         <Stat icon={<Calendar size={16} />} label={t(locale, "analytics.leave.days", "Jours congés approuvés")} value={String(leave?.totalApprovedDays ?? "—")} />
-        <Stat icon={<Clock size={16} />} label={t(locale, "analytics.tti.avg", "Délai moyen embauche")} value={timeToHire ? `${timeToHire.averageDays}j` : "—"} />
+        <Stat icon={<Clock size={16} />} label={t(locale, "analytics.tti.avg", "Délai moyen embauche")} value={timeToHire?.averageDays != null ? `${timeToHire.averageDays}j` : "—"} />
         <Stat icon={<Briefcase size={16} />} label={t(locale, "analytics.funnel.accepted", "Offres acceptées")} value={String(funnel?.offersAccepted ?? "—")} />
       </div>
 
@@ -137,7 +137,7 @@ export default function AnalyticsPage() {
             </p>
           </div>
           <div className="px-5 py-4 space-y-3">
-            {!headcount || headcount.byDepartment.length === 0 ? (
+            {!headcount?.byDepartment?.length ? (
               <p className="text-sm text-[var(--text-muted)] py-4 text-center">
                 {t(locale, "analytics.empty", "Aucune donnée")}
               </p>
