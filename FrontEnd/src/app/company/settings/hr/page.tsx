@@ -201,6 +201,7 @@ export default function TeamManagementPage() {
     canManageTarget(m) && hasPermission("members.roles");
   const canChangeStatusOf = (m: HRMember) =>
     canManageTarget(m) && hasPermission("members.remove");
+  const canInvite = hasPermission("members.invite");
   const canRemoveOf = (m: HRMember) =>
     canManageTarget(m) && hasPermission("members.remove");
   // Role-aware label for a member's badge (prefers role_specialization; falls back to legacy status).
@@ -581,7 +582,7 @@ export default function TeamManagementPage() {
   };
 
   const handleAddMember = () => {
-    if (!isManager) {
+    if (!canInvite) {
       setFeedback({
         type: "error",
         text: translate(
@@ -1408,7 +1409,8 @@ export default function TeamManagementPage() {
         </Modal>
       )}
 
-      {/* Invite CTA */}
+      {/* Invite CTA — every action here needs members.invite (OWNER/ADMIN by default) */}
+      {canInvite && (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
           onClick={handleAddMember}
@@ -1440,6 +1442,7 @@ export default function TeamManagementPage() {
           )}
         </button>
       </div>
+      )}
     </div>
   );
 }

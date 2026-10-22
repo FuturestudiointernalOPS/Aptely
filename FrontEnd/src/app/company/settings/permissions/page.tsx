@@ -156,6 +156,13 @@ export default function PermissionsMatrixPage() {
     [members, user?.email]
   );
   const currentRole = roleFromStatus(currentMember?.membershipStatus ?? null);
+  // Prefer the actual role (custom label > role_specialization) over the legacy status,
+  // which reads "Member" for every non-admin role (HR_LEAD, RECRUITER…).
+  const currentRoleLabel =
+    currentMember?.roleCustomLabel ||
+    (currentMember?.roleSpecialization && ROLE_LABELS[currentMember.roleSpecialization]
+      ? translate(ROLE_LABELS[currentMember.roleSpecialization].key, ROLE_LABELS[currentMember.roleSpecialization].fallback)
+      : getStatusLabel(currentRole, translate));
 
   // Editing the permission matrix requires members.roles (OWNER/ADMIN by default).
   const canEditPermissions = hasPermission("members.roles");
@@ -314,7 +321,7 @@ export default function PermissionsMatrixPage() {
           </p>
           <p className="text-lg font-bold text-[var(--text-primary)]">{institution.name}</p>
           <p className="text-sm text-[var(--text-muted)] mt-1">
-            {translate("institution.permissions.currentRole", "Your current role")}: {getStatusLabel(currentRole, translate)}
+            {translate("institution.permissions.currentRole", "Your current role")}: {currentRoleLabel}
           </p>
         </div>
       )}

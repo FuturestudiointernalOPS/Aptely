@@ -4411,5 +4411,6 @@
   "session.recovery.failedTitle": "Unable to load this page",
   "session.recovery.failedDesc": "Your session is active but the server is not responding. Please try again in a moment.",
   "perm.editor.rankReadOnly": "Read only — you cannot edit a role at or above your own rank.",
-  "institution.settings.workspaceSaveFailed": "Unable to save workspace settings."
+  "institution.settings.workspaceSaveFailed": "Unable to save workspace settings.",
+  "roles.management.actionFailed": "Action failed: check your permissions or try again."
 }

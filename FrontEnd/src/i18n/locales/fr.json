@@ -4411,5 +4411,6 @@
   "session.recovery.failedTitle": "Impossible de charger la page",
   "session.recovery.failedDesc": "Votre session est active mais le serveur ne répond pas. Réessayez dans un instant.",
   "perm.editor.rankReadOnly": "Lecture seule — vous ne pouvez pas modifier un rôle de rang égal ou supérieur au vôtre.",
-  "institution.settings.workspaceSaveFailed": "Impossible d'enregistrer les paramètres de l'espace."
+  "institution.settings.workspaceSaveFailed": "Impossible d'enregistrer les paramètres de l'espace.",
+  "roles.management.actionFailed": "Action impossible : vérifiez vos permissions ou réessayez."
 }
