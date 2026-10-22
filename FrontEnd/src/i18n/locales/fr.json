@@ -4407,5 +4407,7 @@
   "admin.institutions.page": "Page",
   "admin.institutions.deleteTitle": "Supprimer l'entreprise ?",
   "admin.institutions.deleteMessage": "et toutes ses données (membres, fiches postes, candidatures) seront supprimées. Action irréversible.",
-  "admin.institutions.cancel": "Annuler"
+  "admin.institutions.cancel": "Annuler",
+  "session.recovery.failedTitle": "Impossible de charger la page",
+  "session.recovery.failedDesc": "Votre session est active mais le serveur ne répond pas. Réessayez dans un instant."
 }

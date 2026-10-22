@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authRateLimiter } from "@/middleware/rateLimiter.middleware";
+import { authRateLimiter, credentialRateLimiter } from "@/middleware/rateLimiter.middleware";
 import { authGuard } from "@/middleware/auth.middleware";
 import { validate } from "@/middleware/validate.middleware";
 import {
@@ -45,12 +45,12 @@ router.post("/register", authRateLimiter, validate(registerSchema), register);
  * @route   POST /auth/login
  * @desc    Sign in with email + password
  * @access  Public
- * @rateLimit authRateLimiter (20 req / 15 min)
+ * @rateLimit credentialRateLimiter (20 failed attempts / 15 min)
  *
  * Body: { email, password }
  * Returns: { user, session }
  */
-router.post("/login", authRateLimiter, validate(loginSchema), login);
+router.post("/login", credentialRateLimiter, validate(loginSchema), login);
 
 /**
  * @route   POST /auth/refresh
@@ -60,7 +60,7 @@ router.post("/login", authRateLimiter, validate(loginSchema), login);
  * Body: { refreshToken }
  * Returns: { session }
  */
-router.post("/refresh", authRateLimiter, validate(refreshSchema), refresh);
+router.post("/refresh", credentialRateLimiter, validate(refreshSchema), refresh);
 
 /**
  * @route   POST /auth/logout

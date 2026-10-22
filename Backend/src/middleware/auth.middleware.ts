@@ -153,7 +153,9 @@ function verifyJwtHS256(token: string, secret: string): Record<string, unknown> 
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
 
-  if (computed !== signature) {
+  const computedBuf = Buffer.from(computed);
+  const signatureBuf = Buffer.from(signature);
+  if (computedBuf.length !== signatureBuf.length || !crypto.timingSafeEqual(computedBuf, signatureBuf)) {
     throw new Error("Invalid JWT signature");
   }
 
@@ -170,6 +172,101 @@ function verifyJwtHS256(token: string, secret: string): Record<string, unknown> 
   }
 
   return payload;
+}
+
+/**
+ * Verifies an ES256 JWT (Supabase asymmetric signing keys). `resolveKey` maps the
+ * token's `kid` to a public key; exported for unit tests.
+ */
+export async function verifyJwtES256(
+  token: string,
+  resolveKey: (kid: string | undefined) => Promise<crypto.KeyObject | null>
+): Promise<Record<string, unknown>> {
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("Malformed token");
+  const [encodedHeader, encodedPayload, signature] = parts;
+
+  const header = JSON.parse(base64UrlDecode(encodedHeader)) as { alg?: string; kid?: string };
+  if (header.alg !== "ES256") throw new Error("Unsupported JWT algorithm");
+
+  const key = await resolveKey(header.kid);
+  if (!key) throw new Error("Unknown signing key");
+
+  const valid = crypto.verify(
+    "sha256",
+    Buffer.from(`${encodedHeader}.${encodedPayload}`),
+    { key, dsaEncoding: "ieee-p1363" },
+    Buffer.from(signature, "base64url")
+  );
+  if (!valid) throw new Error("Invalid JWT signature");
+
+  const payload = JSON.parse(base64UrlDecode(encodedPayload)) as Record<string, unknown>;
+  const exp = typeof payload["exp"] === "number" ? payload["exp"] : undefined;
+  if (exp && exp <= Math.floor(Date.now() / 1000)) throw new Error("Token expired");
+  return payload;
+}
+
+// Supabase public signing keys (JWKS), cached; refetched on an unknown kid.
+const JWKS_TTL_MS = 10 * 60 * 1000;
+const JWKS_FAILURE_TTL_MS = 30 * 1000;
+let jwksCache: { keys: Map<string, crypto.KeyObject>; expiresAt: number } | null = null;
+let jwksInflight: Promise<Map<string, crypto.KeyObject>> | null = null;
+let jwksFetchedAt = 0;
+
+async function fetchSigningKeys(): Promise<Map<string, crypto.KeyObject>> {
+  jwksFetchedAt = Date.now();
+  const keys = new Map<string, crypto.KeyObject>();
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/.well-known/jwks.json`);
+    if (!res.ok) throw new Error(`JWKS HTTP ${res.status}`);
+    const body = (await res.json()) as {
+      keys?: Array<{ kid?: string; alg?: string; kty?: string; crv?: string; x?: string; y?: string }>;
+    };
+    for (const jwk of body.keys ?? []) {
+      if (jwk.alg !== "ES256" || !jwk.kid) continue;
+      keys.set(jwk.kid, crypto.createPublicKey({ key: jwk, format: "jwk" }));
+    }
+    jwksCache = { keys, expiresAt: Date.now() + JWKS_TTL_MS };
+  } catch (e) {
+    console.warn("[AUTH] Failed to load Supabase JWKS:", e);
+    jwksCache = { keys, expiresAt: Date.now() + JWKS_FAILURE_TTL_MS };
+  }
+  return keys;
+}
+
+async function resolveSupabaseSigningKey(kid: string | undefined): Promise<crypto.KeyObject | null> {
+  if (!kid) return null;
+  const now = Date.now();
+  const known = jwksCache?.keys.get(kid);
+  if (jwksCache && jwksCache.expiresAt >= now && known) return known;
+  // Unknown kid on a fresh cache: allow a refetch (key rotation) at most every
+  // JWKS_FAILURE_TTL_MS, so forged kids can't make every request hit Supabase.
+  if (jwksCache && jwksCache.expiresAt >= now && now - jwksFetchedAt < JWKS_FAILURE_TTL_MS) return null;
+  jwksInflight ??= fetchSigningKeys().finally(() => { jwksInflight = null; });
+  return (await jwksInflight).get(kid) ?? null;
+}
+
+/**
+ * Returns the user id of a request carrying a valid (signature + expiry checked)
+ * Bearer token, or null. Used before authGuard runs (e.g. rate limiting) so a
+ * forged token can never pick its own key. Supports the legacy HS256 secret and
+ * Supabase's asymmetric ES256 keys.
+ */
+export async function verifiedUserIdFromRequest(req: Request): Promise<string | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+  let payload: Record<string, unknown>;
+  try {
+    payload = verifyJwtHS256(token, env.SUPABASE_JWT_SECRET);
+  } catch {
+    try {
+      payload = await verifyJwtES256(token, resolveSupabaseSigningKey);
+    } catch {
+      return null;
+    }
+  }
+  return typeof payload.sub === "string" && payload.sub ? payload.sub : null;
 }
 
 async function getLegacyProfile(
