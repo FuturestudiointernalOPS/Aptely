@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiHelper";
+import { apiFetch, isApiSuccess } from "./apiHelper";
 import {
   API,
   mkApiPath,
@@ -106,7 +106,7 @@ export async function updateOfferStatus(offerId: string, status: OfferStatus): P
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function getOfferVersions(offerId: string): Promise<OfferVersion[]> {
@@ -207,7 +207,7 @@ export async function deleteOnboardingTemplate(templateId: string): Promise<bool
   const res = await apiFetch(mkApiPath(`/onboarding/templates/${templateId}`), "HR", {
     method: "DELETE",
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function instantiateOnboardingChecklist(
@@ -278,12 +278,12 @@ export async function getPublicOfferByToken(token: string): Promise<any | null> 
 
 export async function publicAcceptOffer(token: string): Promise<boolean> {
   const res = await apiFetch(mkApiPath(`/offers/public/${token}/accept`), "none", { method: "POST" });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function publicRejectOffer(token: string): Promise<boolean> {
   const res = await apiFetch(mkApiPath(`/offers/public/${token}/reject`), "none", { method: "POST" });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function publicCounterOffer(
@@ -295,17 +295,17 @@ export async function publicCounterOffer(
     method: "POST",
     body: JSON.stringify({ payload, message }),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function acceptOffer(offerId: string): Promise<boolean> {
   const res = await apiFetch(mkApiPath(`/offers/${offerId}/accept`), "HR", { method: "POST" });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function rejectOffer(offerId: string): Promise<boolean> {
   const res = await apiFetch(mkApiPath(`/offers/${offerId}/reject`), "HR", { method: "POST" });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export interface OnboardingSigningStep {
@@ -344,7 +344,7 @@ export async function signOnboardingDocumentStep(docId: string, position: number
     method: "POST",
     body: JSON.stringify({ signature_meta: {} }),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function verifyOnboardingDocument(
@@ -356,7 +356,7 @@ export async function verifyOnboardingDocument(
     method: "PATCH",
     body: JSON.stringify({ status, notes }),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function getPhase2Overview(): Promise<{

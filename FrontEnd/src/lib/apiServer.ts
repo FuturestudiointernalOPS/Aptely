@@ -54,6 +54,15 @@ type MeServerPayload = {
   institutionId?: string | null;
 };
 
+// Active workspace chosen in the client (see persistActiveWorkspace). Without it,
+// server-rendered pages fall back to the JWT claim, which lags behind a workspace
+// switch until the next token refresh. The backend validates the membership.
+const WORKSPACE_COOKIE = "aptely_active_workspace";
+
+function workspaceHeader(workspaceId: string | undefined): Record<string, string> {
+  return workspaceId ? { "X-Workspace-Id": workspaceId } : {};
+}
+
 async function serverApiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   if (!API_URL) {
     return null;
@@ -73,6 +82,7 @@ async function serverApiFetch<T>(endpoint: string, options: RequestInit = {}): P
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        ...workspaceHeader(cookieStore.get(WORKSPACE_COOKIE)?.value),
         ...(options.headers || {}),
       },
       cache: "no-store",
@@ -151,7 +161,8 @@ export type MyPermissionsServer = {
 };
 
 async function fetchPermissionsWithToken(
-  token: string
+  token: string,
+  workspaceId: string | null
 ): Promise<MyPermissionsServer> {
   if (!API_URL) return { permissions: [], roleSpecialization: null };
   try {
@@ -159,6 +170,7 @@ async function fetchPermissionsWithToken(
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        ...workspaceHeader(workspaceId ?? undefined),
       },
       cache: "no-store",
     });
@@ -185,7 +197,7 @@ export async function getMyPermissionsServer(): Promise<MyPermissionsServer> {
   const cookieStore = await cookies();
   const token = cookieStore.get("hr_access_token")?.value;
   if (!token) return { permissions: [], roleSpecialization: null };
-  return getCachedPermissions(token);
+  return getCachedPermissions(token, cookieStore.get(WORKSPACE_COOKIE)?.value ?? null);
 }
 
 export async function getRecentRolesServer(limit = 5): Promise<Role[]> {

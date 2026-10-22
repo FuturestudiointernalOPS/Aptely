@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { persistActiveWorkspace } from "@/lib/apiHelper";
 import {
   API,
   institutionMembershipsApi,
@@ -125,13 +126,7 @@ function readStoredWorkspace(): string | null {
 }
 
 function writeStoredWorkspace(value: string | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (value === null) window.localStorage.removeItem(STORAGE_KEY);
-    else window.localStorage.setItem(STORAGE_KEY, value);
-  } catch {
-    /* ignore quota errors */
-  }
+  persistActiveWorkspace(value);
 }
 
 interface WorkspaceProviderProps {

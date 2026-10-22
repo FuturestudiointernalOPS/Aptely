@@ -203,19 +203,13 @@ export function requirePermission(permission: InstitutionPermission) {
   return asyncHandler(async (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
     const user = req.user!;
 
-    // Resolution order:
-    //   1. req.workspace (set by workspaceContext if mounted)
-    //   2. X-Workspace-Id header (fallback when workspaceContext didn't run)
-    //   3. JWT app_metadata.active_institution_id
-    //   4. Legacy user.institutionId
-    const headerRaw = (req.headers["x-workspace-id"] ?? "").toString().trim().toLowerCase();
-    const headerInstitutionId = headerRaw && !["individual", "personal", "null", ""].includes(headerRaw)
-      ? headerRaw
-      : null;
-
+    // authGuard already resolved the request's workspace (X-Workspace-Id validated
+    // against memberships) into user.institutionId / activeInstitutionId. Check the
+    // permission on that same institution the controllers will read and write —
+    // never on the raw header, or a permission held in one workspace would unlock
+    // data in another.
     const institutionId =
       req.workspace?.institutionId
-      ?? headerInstitutionId
       ?? user.activeInstitutionId
       ?? user.institutionId
       ?? null;

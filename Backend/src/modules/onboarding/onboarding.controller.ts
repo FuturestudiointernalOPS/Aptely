@@ -519,15 +519,36 @@ export const completeDocumentUpload = asyncHandler(
 
     const { data: doc, error: docError } = await supabaseAdmin
       .from("onboarding_documents")
-      .select("id, uploaded_by, checklist_id")
+      .select("id, uploaded_by, checklist_id, storage_path")
       .eq("id", documentId)
       .single();
 
     if (docError || !doc) throw new AppError(404, "Document not found");
-    // Ownership check: the uploader or an institution member can confirm.
-    // Candidates uploading their own docs are always the uploaded_by.
-    if (doc.uploaded_by !== user.id && !user.institutionId) {
-      throw new AppError(403, "Access denied");
+    // Ownership check: the uploader, or a member of the institution that owns the
+    // application. Being a member of *some* institution is not enough.
+    if (doc.uploaded_by !== user.id) {
+      const { data: checklist } = await supabaseAdmin
+        .from("onboarding_checklists")
+        .select("application_id")
+        .eq("id", doc.checklist_id)
+        .maybeSingle();
+      const { data: app } = checklist
+        ? await supabaseAdmin
+            .from("applications")
+            .select("roles!inner(institution_id)")
+            .eq("id", checklist.application_id)
+            .maybeSingle()
+        : { data: null };
+      const roleData = app?.roles as unknown;
+      const role = Array.isArray(roleData) ? roleData[0] : (roleData as { institution_id: string } | null);
+      if (!user.institutionId || role?.institution_id !== user.institutionId) {
+        throw new AppError(403, "Access denied");
+      }
+    }
+    // The object was uploaded to the path issued at presign time; never let the
+    // client repoint the document at another file in the bucket.
+    if (storagePath !== doc.storage_path) {
+      throw new AppError(422, "storagePath does not match the prepared upload");
     }
 
     const { data: updated, error: updateError } = await supabaseAdmin

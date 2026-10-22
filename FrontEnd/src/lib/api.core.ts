@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiHelper";
+import { apiFetch, isApiSuccess } from "./apiHelper";
 import {
   API,
   mkApiPath,
@@ -306,7 +306,7 @@ export async function evaluateRole(roleId: string, limit: number): Promise<boole
     method: "POST",
     body: JSON.stringify({ limit })
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function finalizeSelection(applicationId: string, selectionData: { approvalMessage?: string; rejectionMessage?: string }): Promise<boolean> {
@@ -314,14 +314,14 @@ export async function finalizeSelection(applicationId: string, selectionData: { 
     method: "POST",
     body: JSON.stringify(selectionData)
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function sendSelectionEmails(applicationId: string): Promise<boolean> {
   const res = await apiFetch(mkApiPath(`/applications/${applicationId}/send-emails`), "HR", {
     method: "POST",
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function getApplicationById(applicationId: string): Promise<any> {
@@ -349,7 +349,7 @@ export async function getApplicationDocuments(applicationId: string): Promise<Ap
 // ────────── HR Members ──────────
 function normalizeMember(m: any): HRMember {
   return {
-    userId: m.profiles?.id || "unknown",
+    userId: m.user_id || m.profiles?.id || "unknown",
     email: m.profiles?.email || "Unknown",
     fullName: m.profiles?.full_name || null,
     membershipStatus: m.status,
@@ -360,16 +360,23 @@ function normalizeMember(m: any): HRMember {
   };
 }
 
+/**
+ * Without an explicit page, walks every page so callers get the whole team — the
+ * backend paginates (20 by default, 50 max) and the team page looks the current
+ * user up in this list to decide which management actions to show.
+ */
 export async function getHRMembers(params?: { search?: string; page?: number; limit?: number }): Promise<HRMember[]> {
-  const qs = new URLSearchParams();
-  if (params?.search) qs.set("search", params.search);
-  if (params?.page)   qs.set("page", String(params.page));
-  if (params?.limit)  qs.set("limit", String(params.limit));
-  const qsStr = qs.toString();
-  const membersUrl = qsStr ? withParams(institutionMembersApi, qsStr) : institutionMembersApi;
-  const res = await apiFetch(membersUrl, "HR");
-  const members = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-  return members.map(normalizeMember);
+  if (params?.page) {
+    const { members } = await getHRMembersPaginated(params);
+    return members;
+  }
+  const all: HRMember[] = [];
+  for (let page = 1; page <= 100; page++) {
+    const { members, meta } = await getHRMembersPaginated({ ...params, page, limit: params?.limit ?? 50 });
+    all.push(...members);
+    if (!meta.hasMore || members.length === 0) break;
+  }
+  return all;
 }
 
 export async function getHRMembersPaginated(params?: { search?: string; page?: number; limit?: number }): Promise<{
@@ -395,7 +402,7 @@ export async function removeInstitutionMember(userId: string): Promise<boolean> 
   const res = await apiFetch(mkApiPath(`/institution/members/${userId}`), "HR", {
     method: "DELETE",
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function updateInstitutionMemberStatus(
@@ -406,7 +413,7 @@ export async function updateInstitutionMemberStatus(
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function transferOwnership(newOwnerUserId: string): Promise<boolean> {
@@ -414,7 +421,7 @@ export async function transferOwnership(newOwnerUserId: string): Promise<boolean
     method: "POST",
     body: JSON.stringify({ newOwnerUserId }),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 // ────────── Role permissions matrix ──────────
@@ -432,7 +439,7 @@ export async function updateRolePermissions(
     method: "PUT",
     body: JSON.stringify(permissions),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 // ────────── Custom roles ──────────
@@ -451,7 +458,7 @@ export async function createCustomRole(
     method: "POST",
     body: JSON.stringify({ name, permissions, ...(typeof rank === "number" ? { rank } : {}) }),
   });
-  return (res ?? null) as CustomRole | null;
+  return (isApiSuccess(res) ? res : null) as CustomRole | null;
 }
 
 export async function updateCustomRole(
@@ -462,14 +469,14 @@ export async function updateCustomRole(
     method: "PATCH",
     body: JSON.stringify(payload),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function deleteCustomRole(id: string): Promise<boolean> {
   const res = await apiFetch(mkApiPath(`/institution/custom-roles/${id}`), "HR", {
     method: "DELETE",
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function updateMemberRoleSpecialization(
@@ -481,7 +488,7 @@ export async function updateMemberRoleSpecialization(
     method: "PATCH",
     body: JSON.stringify({ roleSpecialization, customRoleId }),
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 // ────────── Join Requests ──────────
@@ -492,7 +499,7 @@ export async function getJoinRequests(): Promise<JoinRequest[]> {
     requestId: r.id,
     userId: r.user_id || "unknown",
     email: r.profiles?.email || "Unknown",
-    requestedAt: r.created_at || new Date().toISOString(),
+    requestedAt: r.joined_at || r.created_at || new Date().toISOString(),
     status: "PENDING"
   }));
 }
@@ -502,7 +509,7 @@ export async function approveJoinRequest(userId: string): Promise<boolean> {
     method: "PATCH",
     body: JSON.stringify({ action: "ACCEPT" })
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 export async function refuseJoinRequest(userId: string): Promise<boolean> {
@@ -510,7 +517,7 @@ export async function refuseJoinRequest(userId: string): Promise<boolean> {
     method: "PATCH",
     body: JSON.stringify({ action: "REJECT" })
   });
-  return !!res;
+  return isApiSuccess(res);
 }
 
 // ────────── Institution Settings ──────────

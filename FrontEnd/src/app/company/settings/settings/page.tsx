@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  getHRMembers,
   getInstitutionSettings,
   getPersonalSettings,
   InstitutionSettings,
   PersonalSettings,
   updatePersonalSettings,
 } from "@/lib/api";
-import { apiFetch } from "@/lib/apiHelper";
+import { apiFetch, isApiSuccess } from "@/lib/apiHelper";
 import { getClientLocale, localizePath, setLocaleCookie, t } from "@/lib/i18n";
 import { AvatarUploader } from "@/components/ui/AvatarUploader";
 import { LogoUploader } from "@/components/ui/LogoUploader";
@@ -36,7 +37,6 @@ import {
   ROUTES,
   API,
   institutionOwnerLabelApi,
-  institutionMembersApi,
   institutionInvitationsApi,
   institutionInviteRegenerateApi,
   authMeApi,
@@ -78,7 +78,11 @@ function defaultPersonalSettings(): PersonalSettings {
 export default function InstitutionSettingsPage() {
   useRequireInstitution();
   const { user, logout } = useAuth();
-  const { active, refresh: refreshWorkspace } = useWorkspace();
+  const { active, refresh: refreshWorkspace, hasPermission } = useWorkspace();
+  // Gate on effective permissions (OWNER and ADMIN have both by default), not on
+  // the OWNER status: the backend authorises these actions by permission.
+  const canEditInstitution = hasPermission("settings.edit");
+  const canManageInvites = hasPermission("members.invite");
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
@@ -108,7 +112,6 @@ export default function InstitutionSettingsPage() {
   const [inviteCopied, setInviteCopied] = useState(false);
 
   const [saveBanner, setSaveBanner] = useState<string | null>(null);
-  const [canEditInstitution, setCanEditInstitution] = useState(false);
   const [memberStatus, setMemberStatus] = useState<string | null>(null);
   const [ownerEmails, setOwnerEmails] = useState<string[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
@@ -164,7 +167,7 @@ export default function InstitutionSettingsPage() {
       body: JSON.stringify({ label: ownerLabel }),
     });
     setSavingLabel(false);
-    if (res !== null) {
+    if (isApiSuccess(res)) {
       // Reload to refresh workspace context so badge updates immediately
       window.location.reload();
     }
@@ -174,11 +177,11 @@ export default function InstitutionSettingsPage() {
     const loadSettings = async () => {
       setIsLoading(true);
 
-      const [institutionData, membersResponse] = await Promise.all([
+      // getHRMembers walks every page: the first page alone (20 members) may not
+      // contain the current user, which left their status unknown.
+      const [institutionData, membersList] = await Promise.all([
         getInstitutionSettings(),
-        apiFetch(institutionMembersApi, "HR", {
-          method: "GET",
-        }),
+        getHRMembers().catch(() => []),
       ]);
 
       if (institutionData.name === "Unknown") {
@@ -186,34 +189,17 @@ export default function InstitutionSettingsPage() {
         return;
       }
 
-      // institutionMembersApi returns { data, meta } (paginated envelope) — apiFetch
-      // preserves that shape as-is instead of unwrapping .data, unlike plain endpoints.
-      type MemberRow = { status?: string; profiles?: { email?: string } | null };
-      const membersList: MemberRow[] = Array.isArray(membersResponse)
-        ? (membersResponse as MemberRow[])
-        : Array.isArray((membersResponse as { data?: unknown })?.data)
-          ? ((membersResponse as { data: MemberRow[] }).data)
-          : [];
-
-      if (user?.email && membersList.length > 0) {
-        const owners = membersList
-          .filter((member) => member?.status === "OWNER")
-          .map((member) => String(member?.profiles?.email || ""))
-          .filter(Boolean);
-
-        setOwnerEmails(owners);
-
-        const currentMember = membersList.find(
-          (member) =>
-            String(member?.profiles?.email || "").toLowerCase() ===
-            user.email.toLowerCase(),
+      const currentMember = user?.email
+        ? membersList.find((member) => member.email.toLowerCase() === user.email.toLowerCase())
+        : undefined;
+      if (membersList.length > 0) {
+        setOwnerEmails(
+          membersList
+            .filter((member) => member.membershipStatus === "OWNER")
+            .map((member) => member.email)
+            .filter(Boolean),
         );
-
-        const status = currentMember?.status
-          ? String(currentMember.status)
-          : null;
-        setMemberStatus(status);
-        setCanEditInstitution(status === "OWNER");
+        setMemberStatus(currentMember?.membershipStatus ?? null);
       }
 
       setSettings(institutionData);
@@ -221,12 +207,9 @@ export default function InstitutionSettingsPage() {
 
       // Display the canonical institution invite code/link.
       // GET existing invite first (matches Équipe); only POST if none exists.
-      const isOwner = !!membersList.find(
-        (member) =>
-          String(member?.profiles?.email || "").toLowerCase() ===
-            String(user?.email || "").toLowerCase() &&
-          String(member?.status) === "OWNER",
-      );
+      // Owners and admins can create the canonical invite (members.invite by default).
+      const canCreateInvite =
+        currentMember?.membershipStatus === "OWNER" || currentMember?.membershipStatus === "ADMIN";
       try {
         let token = "";
         // Always GET first — ensures same token as Équipe
@@ -237,8 +220,8 @@ export default function InstitutionSettingsPage() {
           token = String(invites[0].token || "");
           setDisplayInviteId(String(invites[0].id || ""));
         }
-        // Only POST if no existing invite AND user is owner
-        if (!token && isOwner) {
+        // Only POST if no existing invite AND user may create one
+        if (!token && canCreateInvite) {
           const created = await apiFetch(institutionInvitationsApi, "HR", {
             method: "POST",
             body: JSON.stringify({}),
@@ -373,7 +356,7 @@ export default function InstitutionSettingsPage() {
       setSaveBanner(
         tr(
           "institution.settings.ownerOnlyWorkspace",
-          "Only institution owners can edit workspace settings. Your personal settings remain available in the Personal tab.",
+          "You don't have permission to edit workspace settings. Your personal settings remain available in the Personal tab.",
         ),
       );
       return;
@@ -413,7 +396,12 @@ export default function InstitutionSettingsPage() {
         body: JSON.stringify(validation.data),
       });
 
-      if (res !== null) {
+      if (!isApiSuccess(res)) {
+        setSaveBanner(
+          (res as { error?: string } | null)?.error ??
+            tr("institution.settings.workspaceSaveFailed", "Unable to save workspace settings."),
+        );
+      } else {
         setSaved(true);
         setBaselineSettings(settings);
         setSaveBanner(
@@ -709,7 +697,7 @@ export default function InstitutionSettingsPage() {
                 <p>
                   {tr(
                     "institution.settings.readOnly",
-                    "You can view workspace settings, but only owners can edit them.",
+                    "You can view workspace settings, but not edit them (settings permission required).",
                   )}
                   {ownerEmails.length > 0
                     ? ` ${tr("institution.settings.owners", "Owners")}: ${ownerEmails.join(", ")}.`
@@ -732,7 +720,7 @@ export default function InstitutionSettingsPage() {
                 <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)]">
                   {tr(
                     "institution.settings.controlsOwner",
-                    "Institution controls (Owner)",
+                    "Institution controls",
                   )}
                 </p>
               </div>
@@ -983,7 +971,7 @@ export default function InstitutionSettingsPage() {
             </div>
           )}
 
-          {canEditInstitution && active.kind === "institution" && (
+          {canManageInvites && active.kind === "institution" && (
             <div className="bg-[var(--bg-surface)] border border-[var(--border)] overflow-hidden">
               <div className="border-b border-[var(--border)] px-5 py-3 flex items-center gap-2">
                 <Link2 className="w-4 h-4 text-[var(--accent)]" />
@@ -1086,8 +1074,8 @@ export default function InstitutionSettingsPage() {
                   </div>
                 </div>
 
-                {/* Regenerate button — OWNER/ADMIN only */}
-                {canEditInstitution && displayInviteId && (
+                {/* Regenerate button — members.invite (OWNER/ADMIN by default) */}
+                {canManageInvites && displayInviteId && (
                   <button
                     type="button"
                     onClick={handleRegenerateInvite}

@@ -38,6 +38,9 @@ const envSchema = z.object({
   // Rate limiting — global
   RATE_LIMIT_WINDOW_MS: z.string().default("900000"),
   RATE_LIMIT_MAX_REQUESTS: z.string().default("100"),
+  // Authenticated traffic is keyed per user (not per IP) and gets a higher budget:
+  // a single dashboard load is ~15 requests and notifications poll every 30 s.
+  RATE_LIMIT_MAX_REQUESTS_AUTHENTICATED: z.string().default("1500"),
 
   // Rate limiting — auth routes (login, register)
   AUTH_RATE_LIMIT_WINDOW_MS: z.string().default("900000"),

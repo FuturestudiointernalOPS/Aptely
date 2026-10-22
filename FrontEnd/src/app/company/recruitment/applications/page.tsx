@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getAllApplications, type Application } from "@/lib/api";
 import { useRequireInstitution } from "@/lib/auth";
+import { useWorkspace } from "@/lib/workspace";
 import { getClientLocale, t } from "@/lib/i18n";
 import { Users, Search, Filter, ArrowUpRight, Briefcase, Calendar, User2, Sparkles } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -46,6 +47,7 @@ function statusBadge(status: string): string {
 export default function ApplicationsPage() {
     useRequireInstitution();
     const locale = getClientLocale();
+    const { hasPermission } = useWorkspace();
 
     const [loading, setLoading] = useState(true);
     const [applications, setApplications] = useState<Application[]>([]);
@@ -163,7 +165,7 @@ export default function ApplicationsPage() {
                                 <Filter className="w-4 h-4" />
                                 {t(locale, "applications.empty.clearFilters", "Effacer les filtres")}
                             </button>
-                        ) : (
+                        ) : hasPermission("roles.create") && (
                             <Link
                                 href={ROUTES.company.recruitment.rolesCreate}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--accent-dim)] border border-[var(--accent)] text-[var(--accent)] text-sm font-semibold hover:bg-[var(--accent)] hover:text-white transition-all"

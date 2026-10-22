@@ -72,7 +72,8 @@ export default function WebhooksPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const res = await apiFetch(API.webhooks, "HR");
-    setWebhooks(res?.data ?? []);
+    // apiFetch already unwraps the { data } envelope.
+    setWebhooks(Array.isArray(res) ? res : res?.data ?? []);
     setLoading(false);
   }, []);
 
@@ -86,8 +87,9 @@ export default function WebhooksPage() {
       body: JSON.stringify({ url: newUrl.trim(), events: Array.from(selectedEvents), description: newDesc.trim() || undefined }),
     });
     setSubmitting(false);
-    if (res?.data) {
-      setNewSecret({ id: res.data.id as string, secret: res.data.secret as string });
+    const created = res?.data ?? res;
+    if (created?.id && created?.secret) {
+      setNewSecret({ id: created.id as string, secret: created.secret as string });
       setShowForm(false);
       setNewUrl(""); setNewDesc(""); setSelectedEvents(new Set());
       await load();

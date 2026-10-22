@@ -6,7 +6,7 @@ import {
   ArrowLeft, User, Briefcase, Building2, Calendar,
   Edit2, Save, X, ChevronDown, ChevronUp, Star, TrendingUp, TrendingDown, CheckCircle2,
 } from "lucide-react";
-import { apiFetch } from "@/lib/apiHelper";
+import { apiFetch, isApiSuccess } from "@/lib/apiHelper";
 import { ROUTES, employeeApiPath, employeeOffboardPath, employeeLeaveRequestsApi, employeeReviewsApi, employeeReviewApi, employeeReviewAckApi, appPath, employeeLearningPath, employeeCompensationPath } from "@/lib/routes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getClientLocale, t } from "@/lib/i18n";
@@ -151,7 +151,7 @@ export default function EmployeeProfilePage() {
     setLoading(true);
     try {
       const res = await apiFetch(employeeApiPath(userId), "HR") as EmployeeDetail | null;
-      if (res) {
+      if (isApiSuccess(res) && res) {
         setEmployee(res);
         setEditFields({
           employment_type: res.employment_type,

@@ -22,9 +22,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { SessionRecovery } from "@/components/SessionRecovery";
 import { getServerLocale, t, Locale } from "@/lib/i18n";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ROUTES, interviewNotesPath, rolePath } from "@/lib/routes";
+import { ROUTES, createAuthRedirect, interviewNotesPath, rolePath } from "@/lib/routes";
 
 
 function relativeTime(iso: string, locale: Locale): string {
@@ -71,7 +73,13 @@ export default async function DashboardPage() {
   const locale = await getServerLocale();
   const me = await getMeServer();
   if (!me) {
-    redirect(ROUTES.login);
+    // Access token expired (or transient backend error) but the session may still
+    // be alive: let the client rotate it instead of bouncing to the login page.
+    const cookieStore = await cookies();
+    if (!cookieStore.has("hr_refresh_token")) {
+      redirect(createAuthRedirect(ROUTES.company.dashboard));
+    }
+    return <SessionRecovery returnTo={ROUTES.company.dashboard} />;
   }
 
   if (!me.institutionId) {

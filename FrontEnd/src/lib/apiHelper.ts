@@ -35,6 +35,29 @@ function getTokenExpiry(): number | null {
   return match ? Number(decodeURIComponent(match[1])) : null;
 }
 
+// ── Active workspace persistence ──────────────────────────────────────────────
+
+const WORKSPACE_STORAGE_KEY = "aptely_active_workspace";
+
+/**
+ * Persists the active workspace for client calls (localStorage → X-Workspace-Id in
+ * apiFetch) and for server-rendered pages (cookie → X-Workspace-Id in apiServer).
+ * `null` = personal workspace, `undefined` = forget it entirely (logout).
+ */
+export function persistActiveWorkspace(value: string | null | undefined): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value) window.localStorage.setItem(WORKSPACE_STORAGE_KEY, value);
+    else window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+  } catch {
+    /* ignore quota / privacy-mode errors */
+  }
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = value === undefined
+    ? `${WORKSPACE_STORAGE_KEY}=; Path=/; Max-Age=0; SameSite=Lax${secure}`
+    : `${WORKSPACE_STORAGE_KEY}=${encodeURIComponent(value ?? "individual")}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+}
+
 // Singleton refresh promise — prevents concurrent token rotations (race condition)
 let _refreshPromise: Promise<{ accessToken: string; expiresAt: number } | null> | null = null;
 
@@ -193,6 +216,18 @@ export async function apiFetch(
     else console.error("Network Error");
     return null;
   }
+}
+
+/**
+ * True when an apiFetch result represents a successful call. apiFetch returns a
+ * truthy `{ isAuthError }` / `{ isPermissionError }` object for 401/403, so a plain
+ * `!!res` would report a refused action (e.g. "cannot manage a member of higher
+ * rank") as a success.
+ */
+export function isApiSuccess(res: unknown): boolean {
+  if (res === null || res === undefined) return false;
+  if (typeof res === "object" && ("isAuthError" in res || "isPermissionError" in res)) return false;
+  return true;
 }
 
 // Lightweight API caller that throws on any HTTP/network error

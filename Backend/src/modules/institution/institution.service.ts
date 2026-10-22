@@ -176,14 +176,10 @@ export async function assertRankAuthority(
 
 // ─── Request Helpers ─────────────────────────────────────────────────────────
 
+// authGuard has already validated X-Workspace-Id and folded it into req.user.
 export function resolveInstitutionId(req: AuthenticatedRequest): string | null {
-  const headerRaw = (req.headers["x-workspace-id"] ?? "").toString().trim().toLowerCase();
-  const headerInstitutionId = headerRaw && !["individual", "personal", "null", ""].includes(headerRaw)
-    ? headerRaw
-    : null;
   return (
     req.workspace?.institutionId
-    ?? headerInstitutionId
     ?? req.user!.activeInstitutionId
     ?? req.user!.institutionId
     ?? null
