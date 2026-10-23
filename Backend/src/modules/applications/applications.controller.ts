@@ -325,7 +325,7 @@ export const updateApplicationStatus = asyncHandler(
         updated_at,
         candidate_id,
         role_id,
-        roles(institutions(name), role_dna(full_form_json)),
+        roles(department_id, institutions(name), role_dna(full_form_json)),
         profiles(full_name, email)
       `)
       .single();
@@ -337,15 +337,13 @@ export const updateApplicationStatus = asyncHandler(
 
     if (status === "HIRED") {
       try {
-        const roleAssoc = data.roles as unknown as {
-          department_id?: string | null;
-          job_position_id?: string | null;
-        };
+        // department_id is now selected above; roles has no job_position_id column.
+        const roleAssoc = data.roles as unknown as { department_id?: string | null } | null;
         await autoCreateEmployeeOnHired(
           institutionId,
           data.candidate_id as string,
           id,
-          roleAssoc?.job_position_id ?? null,
+          null,
           roleAssoc?.department_id ?? null
         );
       } catch (employeeErr) {
