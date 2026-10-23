@@ -3770,6 +3770,7 @@
   "notification.onboardingTaskCompleted": "Onboarding task completed",
   "notification.teamMemberJoined": "New team member joined",
   "notification.general": "Notification",
+  "notification.applicationReceived": "New application received",
   "notifications.title": "Notifications",
   "notifications.markAllRead": "Mark all as read",
   "notifications.empty": "No notifications",

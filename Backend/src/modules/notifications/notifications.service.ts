@@ -56,6 +56,12 @@ export interface CreateNotificationParams {
   link?: string | null;
 }
 
+// Types not present in the database enum `notification_type`: inserting them was
+// rejected (and only logged), so HR never got "new application" notifications.
+// They are stored as GENERAL instead — the bell only uses title/body/link, and the
+// title still carries the specific i18n key (e.g. notification.applicationReceived).
+const TYPES_MISSING_IN_DB = new Set<NotificationType>(["APPLICATION_RECEIVED"]);
+
 /**
  * Fire-and-forget — never throws. Designed to be called without awaiting in controllers.
  */
@@ -64,7 +70,7 @@ export async function createNotification(params: CreateNotificationParams): Prom
     const { error } = await supabaseAdmin.from("notifications").insert({
       user_id:        params.userId,
       institution_id: params.institutionId ?? null,
-      type:           params.type,
+      type:           TYPES_MISSING_IN_DB.has(params.type) ? "GENERAL" : params.type,
       title:          params.title,
       body:           params.body ?? null,
       link:           params.link ?? null,
