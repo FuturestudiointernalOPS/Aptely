@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/apiHelper";
 import {
   adminUsersApi, adminSuspendUserApi, adminDeleteUserApi, adminUserByIdApi, withParams
@@ -270,13 +270,18 @@ export default function AdminUsersPage() {
   const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
   const [selectedUser, setSelectedUser]   = useState<string | null>(null);
   const [category, setCategory]           = useState<UserCategory>("");
+  // Only the latest request may update the table: a slower, older response (e.g. the
+  // unfiltered initial load) used to overwrite the result of a newer filter.
+  const latestRequest = useRef(0);
 
   const load = useCallback((page = 1, q = search, cat: UserCategory = category) => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: "20" });
     if (q) params.set("search", q);
     if (cat) params.set("role", cat);
     apiFetch(withParams(adminUsersApi, params.toString())).then((res) => {
+      if (requestId !== latestRequest.current) return;
       const typed = res as UsersResponse | null;
       if (typed) {
         setUsers(typed.items ?? []);
