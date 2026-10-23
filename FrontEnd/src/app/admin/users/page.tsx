@@ -37,6 +37,10 @@ interface UserDetail {
   recentApplications: { id: string; role_id: string; status: string; created_at: string }[];
 }
 
+function dateLocale(locale: string) {
+  return locale === "en" ? "en-US" : "fr-FR";
+}
+
 // ─── User Detail Drawer ───────────────────────────────────────────────────────
 
 function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }) {
@@ -129,7 +133,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[var(--text-muted)]">{tr("admin.users.fieldCreatedAt", "Inscrit le")}</span>
                 <span className="text-[var(--text-secondary)]">
-                  {new Date(detail.profile.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                  {new Date(detail.profile.created_at).toLocaleDateString(dateLocale(locale), { day: "numeric", month: "long", year: "numeric" })}
                 </span>
               </div>
             </div>
@@ -155,7 +159,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[var(--text-muted)]">{tr("admin.users.fieldJoinedAt", "Rejoint le")}</span>
                     <span className="text-[var(--text-secondary)]">
-                      {new Date(detail.membership.joined_at).toLocaleDateString("fr-FR")}
+                      {new Date(detail.membership.joined_at).toLocaleDateString(dateLocale(locale))}
                     </span>
                   </div>
                 </div>
@@ -185,7 +189,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[var(--text-muted)]">{tr("admin.users.fieldUpdatedAt", "Mis à jour")}</span>
                     <span className="text-[var(--text-secondary)]">
-                      {new Date(detail.talentDna.updated_at).toLocaleDateString("fr-FR")}
+                      {new Date(detail.talentDna.updated_at).toLocaleDateString(dateLocale(locale))}
                     </span>
                   </div>
                 </div>
@@ -211,7 +215,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                       <div className="flex items-center gap-2">
                         <Calendar size={11} className="text-[var(--text-muted)]" />
                         <span className="text-[var(--text-muted)]">
-                          {new Date(a.created_at).toLocaleDateString("fr-FR")}
+                          {new Date(a.created_at).toLocaleDateString(dateLocale(locale))}
                         </span>
                       </div>
                       <span className={`font-medium ${appStatusColor(a.status)}`}>{a.status}</span>
@@ -232,6 +236,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
 export default function AdminUsersPage() {
   const locale = getClientLocale();
   const tr = (key: string, fallback: string) => t(locale, key, fallback);
+  const dLoc = dateLocale(locale);
   const [users, setUsers]             = useState<UserRow[]>([]);
   const [meta, setMeta]               = useState({ total: 0, page: 1, limit: 20 });
   const [search, setSearch]           = useState("");
@@ -350,7 +355,7 @@ export default function AdminUsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-[var(--text-secondary)]">
-                    {new Date(u.created_at).toLocaleDateString("fr-FR")}
+                    {new Date(u.created_at).toLocaleDateString(dLoc)}
                   </td>
                   <td className="px-4 py-3">
                     {isBanned ? (

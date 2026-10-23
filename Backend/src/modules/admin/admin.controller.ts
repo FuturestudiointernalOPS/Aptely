@@ -83,8 +83,22 @@ export const listUsers = asyncHandler(
 
     if (error) throw new AppError(500, "Failed to fetch users");
 
+    // Enrich with ban status from Auth (not stored on profiles).
+    // Without this the admin UI always shows "Active" after a suspend.
+    const items = await Promise.all(
+      (data ?? []).map(async (profile) => {
+        try {
+          const { data: authData } = await supabaseAdmin.auth.admin.getUserById(profile.id);
+          const bannedUntil = authData.user?.banned_until ?? null;
+          return { ...profile, banned_until: bannedUntil };
+        } catch {
+          return { ...profile, banned_until: null };
+        }
+      })
+    );
+
     res.status(200).json({
-      items: data,
+      items,
       total: count ?? 0,
       page: parseInt(page ?? "1", 10),
       limit: take,
@@ -103,7 +117,7 @@ export const listUsers = asyncHandler(
  */
 export const getUserById = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params["id"] as string;
 
     // Profil de base
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -116,31 +130,39 @@ export const getUserById = asyncHandler(
     if (!profile) throw new AppError(404, "User not found");
 
     // Données supplémentaires selon le rôle — en parallèle
-    const [membershipRes, talentRes, applicationsRes] = await Promise.all([
-      // Institution (si HR)
+    // membership: prefer ACTIVE; never use maybeSingle() — multi-membership users
+    // would make PostgREST return an error (PGRST116) and 500 the whole detail endpoint.
+    const [membershipRes, talentRes, applicationsRes, authUserRes] = await Promise.all([
       supabaseAdmin
         .from("institution_members")
         .select("institution_id, status, joined_at")
         .eq("user_id", id)
-        .maybeSingle(),
-      // Talent DNA (si CANDIDATE)
+        .order("joined_at", { ascending: false })
+        .limit(5),
       supabaseAdmin
         .from("talent_dna")
         .select("completion_score, created_at, updated_at")
         .eq("candidate_id", id)
         .maybeSingle(),
-      // Candidatures
       supabaseAdmin
         .from("applications")
         .select("id, role_id, status, created_at")
         .eq("candidate_id", id)
         .order("created_at", { ascending: false })
         .limit(10),
+      supabaseAdmin.auth.admin.getUserById(id),
     ]);
 
+    const memberships = membershipRes.data ?? [];
+    const membership =
+      memberships.find((m) => m.status === "ACTIVE") ?? memberships[0] ?? null;
+
     res.status(200).json({
-      profile,
-      membership: membershipRes.data ?? null,
+      profile: {
+        ...profile,
+        banned_until: authUserRes.data.user?.banned_until ?? null,
+      },
+      membership,
       talentDna: talentRes.data ?? null,
       recentApplications: applicationsRes.data ?? [],
     });
@@ -287,32 +309,35 @@ export const getMetrics = asyncHandler(
     const since30d = new Date(Date.now() - 30 * 86400000).toISOString();
     const prevMonth30d = new Date(Date.now() - 60 * 86400000).toISOString();
 
+    // Recruitment job postings live in `roles` (fiches de poste).
+    // `job_positions` is the internal org-chart title table — using it here
+    // zeroed out funnel / active-company metrics while applications still showed.
     const [jobsRes, appsRes, usersRes, activeInstRes, prevActiveInstRes, funnelCounts, acceptedOffersRes] =
       await Promise.all([
-        supabaseAdmin.from("job_positions").select("created_at").gte("created_at", since8w),
+        supabaseAdmin.from("roles").select("created_at").gte("created_at", since8w),
         supabaseAdmin.from("applications").select("created_at").gte("created_at", since8w),
         supabaseAdmin.from("profiles").select("created_at").gte("created_at", since8w),
-        // Active this month: institutions with job postings in last 30d
-        supabaseAdmin.from("job_positions").select("institution_id").gte("created_at", since30d),
-        // Active prev month: institutions with job postings 60d–30d ago
+        // Active this month: institutions with published/created roles in last 30d
+        supabaseAdmin.from("roles").select("institution_id").gte("created_at", since30d),
+        // Active prev month: institutions with roles 60d–30d ago
         supabaseAdmin
-          .from("job_positions")
+          .from("roles")
           .select("institution_id")
           .gte("created_at", prevMonth30d)
           .lt("created_at", since30d),
         Promise.all([
-          supabaseAdmin.from("job_positions").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("roles").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("applications").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("interviews").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("offers").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("offers").select("*", { count: "exact", head: true }).eq("status", "ACCEPTED"),
         ]),
-        // Accepted offers with application chain for PMF metrics
+        // Accepted offers → application → role (institution)
         supabaseAdmin
           .from("offers")
           .select(`
             id, updated_at,
-            applications!inner(created_at, job_positions!inner(institution_id))
+            applications!inner(created_at, roles!inner(institution_id))
           `)
           .eq("status", "ACCEPTED"),
       ]);
@@ -334,13 +359,14 @@ export const getMetrics = asyncHandler(
       : null;
 
     // Repeat hiring: institutions with >= 2 accepted offers
+    // Supabase may return nested relations as object or array depending on cardinality.
+    type RoleNest = { institution_id: string } | { institution_id: string }[];
     type AcceptedOfferRow = {
       id: string;
       updated_at: string;
-      applications: {
-        created_at: string;
-        job_positions: { institution_id: string }[];
-      }[];
+      applications:
+        | { created_at: string; roles: RoleNest }
+        | { created_at: string; roles: RoleNest }[];
     };
     const acceptedOffers = (acceptedOffersRes.data ?? []) as unknown as AcceptedOfferRow[];
 
@@ -348,8 +374,11 @@ export const getMetrics = asyncHandler(
     const timesToHireMs: number[] = [];
 
     for (const offer of acceptedOffers) {
-      const app     = offer.applications?.[0];
-      const instId  = app?.job_positions?.[0]?.institution_id;
+      const appRaw = offer.applications;
+      const app = Array.isArray(appRaw) ? appRaw[0] : appRaw;
+      const rolesRaw = app?.roles;
+      const role = Array.isArray(rolesRaw) ? rolesRaw[0] : rolesRaw;
+      const instId = role?.institution_id;
       if (instId) {
         hiresPerInst.set(instId, (hiresPerInst.get(instId) ?? 0) + 1);
       }
@@ -401,7 +430,7 @@ export const getActivity = asyncHandler(
         .order("created_at", { ascending: false })
         .limit(15),
       supabaseAdmin
-        .from("job_positions")
+        .from("roles")
         .select("id, title, created_at")
         .gte("created_at", since7d)
         .order("created_at", { ascending: false })
@@ -436,12 +465,13 @@ export const getActivity = asyncHandler(
       })),
       ...(appsRes.data ?? []).map((a) => ({
         type: "application",
-        label: `Candidature #${(a.id as string).slice(0, 6)}`,
+        // Neutral label — front localizes via type; keep id fragment for uniqueness
+        label: `Application #${(a.id as string).slice(0, 6)}`,
         at: a.created_at as string,
       })),
       ...(offersRes.data ?? []).map((o) => ({
         type: "offer_accepted",
-        label: `Offre acceptée`,
+        label: "Offer accepted",
         at: o.updated_at as string,
       })),
     ]
@@ -456,7 +486,7 @@ export const getActivity = asyncHandler(
 
 export const getInstitutionById = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params["id"] as string;
 
     const [instRes, membersRes, jobsRes] = await Promise.all([
       supabaseAdmin
@@ -468,8 +498,9 @@ export const getInstitutionById = asyncHandler(
         .from("institution_members")
         .select("user_id, role_specialization, status, joined_at")
         .eq("institution_id", id),
+      // Recruitment fiches de poste (= roles), not org-chart job_positions
       supabaseAdmin
-        .from("job_positions")
+        .from("roles")
         .select("id, title, status, created_at")
         .eq("institution_id", id)
         .order("created_at", { ascending: false })
@@ -477,6 +508,11 @@ export const getInstitutionById = asyncHandler(
     ]);
 
     if (!instRes.data) throw new AppError(404, "Institution not found");
+    if (jobsRes.error) {
+      // Surface query failures instead of silently returning an empty list
+      // (was hiding SA-drawer "0 job postings" while /admin/metrics counted roles).
+      throw new AppError(500, `Failed to fetch roles: ${jobsRes.error.message}`);
+    }
 
     res.status(200).json({
       institution: instRes.data,

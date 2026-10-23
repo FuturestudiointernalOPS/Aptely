@@ -241,7 +241,13 @@ function ActivityFeed({ events }: { events: ActivityEvent[] }) {
                 <Icon size={14} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-[var(--text-primary)] truncate font-medium">{e.label}</p>
+                <p className="text-xs text-[var(--text-primary)] truncate font-medium">
+                  {e.type === "application"
+                    ? `${tr("admin.dashboard.activityApplication", "Candidature")} #${e.label.replace(/^.*#/, "")}`
+                    : e.type === "offer_accepted"
+                      ? tr("admin.dashboard.activityOfferAcceptedFull", "Offre acceptée")
+                      : e.label}
+                </p>
                 <p className="text-[10px] text-[var(--text-muted)]">{tr(meta.labelKey, meta.label)}</p>
               </div>
               <span className="text-[10px] text-[var(--text-muted)] shrink-0 font-medium">{relTime}</span>
@@ -416,7 +422,7 @@ export default function AdminDashboard() {
                 <PMFMetric label={tr("admin.dashboard.appToOffer", "Candidature → Offre")} value={appToOffer ?? 0} max={100} suffix="%" threshold={35} thresholdLabel={tr("admin.dashboard.threshold35", "seuil ≥ 35%")} />
                 <PMFMetric label={tr("admin.dashboard.offerToAccepted", "Offre → Accepté")} value={offerToAccept ?? 0} max={100} suffix="%" threshold={50} thresholdLabel={tr("admin.dashboard.threshold50", "seuil ≥ 50%")} />
                 <PMFMetric label={tr("admin.dashboard.repeatHiring", "Réembauche")} value={metrics?.repeatHiringInstitutions ?? 0} max={10} threshold={3} thresholdLabel={tr("admin.dashboard.threshold3Institutions", "seuil ≥ 3 entreprises")} />
-                <PMFMetric label={tr("admin.dashboard.avgTimeToHire", "Temps moyen embauche")} value={metrics?.avgTimeToHireDays !== null ? Math.max(0, 60 - (metrics?.avgTimeToHireDays ?? 0)) : 0} max={60} suffix="" threshold={39} thresholdLabel={`${metrics?.avgTimeToHireDays ?? "—"}j · ${tr("admin.dashboard.threshold21Days", "seuil ≤ 21j")}`} />
+                <PMFMetric label={tr("admin.dashboard.avgTimeToHire", "Temps moyen embauche")} value={metrics?.avgTimeToHireDays !== null ? Math.max(0, 60 - (metrics?.avgTimeToHireDays ?? 0)) : 0} max={60} suffix="" threshold={39} thresholdLabel={`${metrics?.avgTimeToHireDays ?? "—"}${locale === "en" ? "d" : "j"} · ${tr("admin.dashboard.threshold21Days", locale === "en" ? "threshold ≤ 21d" : "seuil ≤ 21j")}`} />
                 <PMFMetric label={tr("admin.dashboard.institutionRetention", "Rétention entreprises")} value={metrics?.institutionRetentionPct ?? 0} max={100} suffix="%" threshold={70} thresholdLabel={tr("admin.dashboard.threshold70", "seuil ≥ 70%")} />
                 <PMFMetric label={tr("admin.dashboard.appToInterview", "Candidature → Entretien")} value={appToInterview ?? 0} max={100} suffix="%" threshold={25} thresholdLabel={tr("admin.dashboard.threshold25", "seuil ≥ 25%")} />
               </>
@@ -602,7 +608,7 @@ export default function AdminDashboard() {
             {loadingM ? <div className="py-6 text-center text-sm text-[var(--text-muted)]">{tr("admin.dashboard.loading", "Chargement...")}</div> : (
               <div className="text-center py-4">
                 <p className={`text-4xl font-bold ${metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined && metrics.avgTimeToHireDays <= 21 ? "text-[var(--success)]" : metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined && metrics.avgTimeToHireDays <= 42 ? "text-[var(--warning)]" : "text-[var(--text-primary)]"}`}>
-                  {metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined ? `${metrics.avgTimeToHireDays}j` : "—"}
+                  {metrics?.avgTimeToHireDays !== null && metrics?.avgTimeToHireDays !== undefined ? `${metrics.avgTimeToHireDays}${locale === "en" ? "d" : "j"}` : "—"}
                 </p>
                 <p className="text-xs text-[var(--text-muted)] mt-2">{tr("admin.dashboard.avgApplicationToHire", "Délai moyen candidature → embauche")}</p>
                 <p className="text-[10px] text-[var(--text-muted)] mt-1">{tr("admin.dashboard.pmfThreshold21", "Seuil PMF : ≤ 21j")}</p>
