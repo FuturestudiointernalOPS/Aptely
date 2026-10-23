@@ -99,6 +99,11 @@ const JOB_STATUS_COLORS: Record<string, string> = {
 
 const ACTIVE_MEMBER_STATUSES = new Set(["OWNER", "ADMIN", "ACTIVE"]);
 
+function dateLocale(locale: string) {
+  return locale === "en" ? "en-US" : "fr-FR";
+}
+
+
 function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () => void }) {
   const locale = getClientLocale();
   const tr = (key: string, fallback: string) => t(locale, key, fallback);
@@ -195,7 +200,7 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[var(--text-muted)]">{tr("admin.institutions.fieldCreatedAt", "Créée le")}</span>
                 <span className="text-[var(--text-secondary)]">
-                  {new Date(detail.institution.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                  {new Date(detail.institution.created_at).toLocaleDateString(dateLocale(locale), { day: "numeric", month: "long", year: "numeric" })}
                 </span>
               </div>
             </div>
@@ -398,7 +403,7 @@ export default function AdminInstitutionsPage() {
                   <td className="px-4 py-3 text-[var(--text-secondary)]">{inst.member_count ?? "—"}</td>
                   <td className="px-4 py-3 text-[var(--text-secondary)]">{inst.job_posting_count ?? "—"}</td>
                   <td className="px-4 py-3 text-[var(--text-secondary)]">
-                    {new Date(inst.created_at).toLocaleDateString("fr-FR")}
+                    {new Date(inst.created_at).toLocaleDateString(dateLocale(locale))}
                   </td>
                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-end">

@@ -56,6 +56,10 @@ interface UserDetail {
   }[];
 }
 
+function dateLocale(locale: string) {
+  return locale === "en" ? "en-US" : "fr-FR";
+}
+
 // ─── User Detail Drawer ───────────────────────────────────────────────────────
 
 function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }) {
@@ -150,7 +154,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[var(--text-muted)]">{tr("admin.users.fieldCreatedAt", "Inscrit le")}</span>
                 <span className="text-[var(--text-secondary)]">
-                  {new Date(detail.profile.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                  {new Date(detail.profile.created_at).toLocaleDateString(dateLocale(locale), { day: "numeric", month: "long", year: "numeric" })}
                 </span>
               </div>
             </div>
@@ -179,12 +183,13 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-[var(--text-muted)]">{tr("admin.users.fieldJoinedAt", "Rejoint le")}</span>
                           <span className="text-[var(--text-secondary)]">
-                            {new Date(m.joined_at).toLocaleDateString("fr-FR")}
+                            {new Date(m.joined_at).toLocaleDateString(dateLocale(locale))}
                           </span>
                         </div>
                       )}
                     </div>
                   ))}
+
                 </div>
               ) : (
                 <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.users.noInstitution", "Aucune institution")}</p>
@@ -212,7 +217,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[var(--text-muted)]">{tr("admin.users.fieldUpdatedAt", "Mis à jour")}</span>
                     <span className="text-[var(--text-secondary)]">
-                      {new Date(detail.talentDna.updated_at).toLocaleDateString("fr-FR")}
+                      {new Date(detail.talentDna.updated_at).toLocaleDateString(dateLocale(locale))}
                     </span>
                   </div>
                 </div>
@@ -240,9 +245,9 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                         <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
                           <Calendar size={11} />
                           <span className="truncate">
-                            {a.institution_name ?? "—"} · {new Date(a.created_at).toLocaleDateString("fr-FR")}
+                            {a.institution_name ?? "—"} · {new Date(a.created_at).toLocaleDateString(dateLocale(locale))}
                           </span>
-                        </div>
+
                       </div>
                       <span className={`font-medium ${appStatusColor(a.status)}`}>{a.status}</span>
                     </div>
@@ -262,6 +267,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
 export default function AdminUsersPage() {
   const locale = getClientLocale();
   const tr = (key: string, fallback: string) => t(locale, key, fallback);
+  const dLoc = dateLocale(locale);
   const [users, setUsers]             = useState<UserRow[]>([]);
   const [meta, setMeta]               = useState({ total: 0, page: 1, limit: 20 });
   const [search, setSearch]           = useState("");
@@ -407,7 +413,7 @@ export default function AdminUsersPage() {
                       : "—"}
                   </td>
                   <td className="px-4 py-3 text-[var(--text-secondary)]">
-                    {new Date(u.created_at).toLocaleDateString("fr-FR")}
+                    {new Date(u.created_at).toLocaleDateString(dLoc)}
                   </td>
                   <td className="px-4 py-3">
                     {isBanned ? (

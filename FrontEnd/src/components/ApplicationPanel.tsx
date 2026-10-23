@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/lib/apiHelper";
+import { apiFetch, isApiSuccess } from "@/lib/apiHelper";
 import {
     getApplicationDocuments, type ApplicationDocument,
     getOnboardingChecklist, updateOnboardingTaskStatus, listOnboardingTemplates, instantiateOnboardingChecklist,
@@ -158,6 +158,7 @@ export function ApplicationPanel({
     const [app, setApp] = useState<ApplicationDetail | null>(null);
     const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<"denied" | "not_found" | null>(null);
     const [decisionState, setDecisionState] = useState<{
         recommendations: Array<{ id: string; recommendation: string; observations?: string }>;
         decision: { id: string; action: string; reason?: string } | null;
@@ -221,6 +222,7 @@ export function ApplicationPanel({
         if (!id) { setLoading(false); return; }
         setLoading(true);
         setApp(null);
+        setLoadError(null);
         setDecisionState(null);
         setAuditLogs([]);
         setDocuments([]);
@@ -232,8 +234,19 @@ export function ApplicationPanel({
             apiFetch(decisionStateApi(id), "HR"),
             apiFetch(decisionAuditApi(id), "HR"),
         ]).then(([response, docs, stateResponse, logsResponse]) => {
+            // apiFetch returns truthy { isPermissionError } / { isAuthError } on 403/401 —
+            // never treat those as application payloads (cross-org deep-link shell bug).
+            if (!isApiSuccess(response)) {
+                const denied =
+                    typeof response === "object" &&
+                    response !== null &&
+                    ("isPermissionError" in response || "isAuthError" in response);
+                setLoadError(denied ? "denied" : "not_found");
+                setLoading(false);
+                return;
+            }
             const application = (response as any)?.data ?? response;
-            if (application) {
+            if (application && typeof application === "object" && (application.id || application.applicationId || application.status)) {
                 if (!application.aiReport && application.match_results) {
                     const raw = Array.isArray(application.match_results)
                         ? application.match_results[0]
@@ -244,11 +257,15 @@ export function ApplicationPanel({
                     }
                 }
                 setApp(application);
+            } else {
+                setLoadError("not_found");
             }
-            setDocuments(docs);
-            if (stateResponse) setDecisionState(stateResponse as any);
+            setDocuments(Array.isArray(docs) ? docs : []);
+            if (isApiSuccess(stateResponse)) setDecisionState(stateResponse as any);
             if (Array.isArray(logsResponse)) setAuditLogs(logsResponse as any);
-            else if (Array.isArray((logsResponse as any)?.data)) setAuditLogs((logsResponse as any).data);
+            else if (isApiSuccess(logsResponse) && Array.isArray((logsResponse as any)?.data)) {
+                setAuditLogs((logsResponse as any).data);
+            }
             setLoading(false);
         });
     }, [id]);
@@ -394,7 +411,27 @@ export function ApplicationPanel({
     }
 
     if (!app) {
-        return <div className="p-20 text-center text-[var(--text-muted)]">{tr("application.detail.notFound", "Application not found.")}</div>;
+        const msg =
+            loadError === "denied"
+                ? tr(
+                      "application.detail.accessDenied",
+                      "Access denied. This application is outside your organization.",
+                  )
+                : tr("application.detail.notFound", "Application not found.");
+        return (
+            <div className="p-20 text-center space-y-4">
+                <p className="text-[var(--text-muted)]">{msg}</p>
+                {fullPage && (
+                    <Link
+                        href={ROUTES.company.recruitment.applications}
+                        className="inline-flex items-center gap-2 text-[var(--accent)] font-semibold text-sm hover:underline"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        {tr("application.detail.backApplications", "Applications")}
+                    </Link>
+                )}
+            </div>
+        );
     }
 
     const report = app.aiReport;
