@@ -5,6 +5,8 @@ import { asyncHandler } from "@/utils/helpers";
 import { deriveRoleFieldsFromFullForm } from "./role-form.mapper";
 
 const PAGE_SIZE = 20;
+// Upper bound on rows scanned when search filters are applied in memory.
+const MAX_FILTERED_SCAN = 1000;
 
 export const discoverRoles = asyncHandler(async (req: Request, res: Response) => {
   const q        = typeof req.query.q        === "string" ? req.query.q.trim()        : "";
@@ -13,13 +15,20 @@ export const discoverRoles = asyncHandler(async (req: Request, res: Response) =>
   const page     = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
   const offset   = (page - 1) * PAGE_SIZE;
 
-  // Fetch ACTIVE roles with their DNA and institution
-  const { data: rows, error, count } = await supabaseAdmin
+  // Title/location/type live in role_dna.full_form_json (JSONB), so filters run
+  // in memory. They must run BEFORE pagination: filtering a single page made a
+  // published job unfindable as soon as it was not on the current page, and the
+  // total ignored the filters.
+  const hasFilters = Boolean(q || location || type);
+  let rolesQuery = supabaseAdmin
     .from("roles")
     .select("id, share_link, created_at, role_dna(full_form_json), institution:institutions(name, logo_url)", { count: "exact" })
     .eq("status", "ACTIVE")
-    .order("created_at", { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1);
+    .order("created_at", { ascending: false });
+  rolesQuery = hasFilters
+    ? rolesQuery.range(0, MAX_FILTERED_SCAN - 1)
+    : rolesQuery.range(offset, offset + PAGE_SIZE - 1);
+  const { data: rows, error, count } = await rolesQuery;
 
   if (error) throw new AppError(500, "Failed to fetch roles");
 
@@ -62,8 +71,8 @@ export const discoverRoles = asyncHandler(async (req: Request, res: Response) =>
   }
 
   res.status(200).json({
-    data: results,
-    total: count ?? 0,
+    data: hasFilters ? results.slice(offset, offset + PAGE_SIZE) : results,
+    total: hasFilters ? results.length : count ?? 0,
     page,
     pageSize: PAGE_SIZE,
   });

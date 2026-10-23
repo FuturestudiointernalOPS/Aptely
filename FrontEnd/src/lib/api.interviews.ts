@@ -436,7 +436,9 @@ export async function updateApplicationStatus(applicationId: string, status: str
       method: "PATCH",
       body: JSON.stringify({ status })
     });
-    return res !== null;
+    // A 401/403 comes back as a truthy error object: only a real success counts,
+    // otherwise the role page keeps an optimistic status that was never saved.
+    return isApiSuccess(res);
   } catch (err) {
     console.error("Failed to update application status", err);
     return false;

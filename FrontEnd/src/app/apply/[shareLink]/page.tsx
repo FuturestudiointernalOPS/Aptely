@@ -376,7 +376,11 @@ export default function PublicApplyPage() {
     const roleDescription = (role?.description as string) || (role?.full_form_json as any)?.mission90Day || "";
     const roleDepartment = (role?.department as string) || "";
     const roleSuccess6 = (role?.full_form_json as any)?.success6Month || "";
-    const roleSkills = (role?.full_form_json as any)?.skills || [];
+    // The role form saves its empty default rows too: keep only named skills, otherwise
+    // the "required skills" section renders blank pills.
+    const roleSkills = (((role?.full_form_json as any)?.skills || []) as any[]).filter((s: any) =>
+      String(typeof s === "string" ? s : s?.name ?? "").trim().length > 0,
+    );
     const roleSalary = (role?.full_form_json as any)?.salaryMin && (role?.full_form_json as any)?.salaryMax 
       ? `${(role?.full_form_json as any).salaryMin} - ${(role?.full_form_json as any).salaryMax} ${(role?.full_form_json as any).salaryCurrency || 'EUR'}` 
       : "";

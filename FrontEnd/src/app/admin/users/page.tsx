@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/apiHelper";
 import {
   adminUsersApi, adminSuspendUserApi, adminDeleteUserApi, adminUserByIdApi, withParams
@@ -13,6 +13,15 @@ import { getClientLocale, t } from "@/lib/i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface UserMembership {
+  institution_id: string;
+  institution_name: string | null;
+  role_specialization: string | null;
+  role_custom_label?: string | null;
+  status: string;
+  joined_at?: string;
+}
+
 interface UserRow {
   id: string;
   email: string;
@@ -21,7 +30,10 @@ interface UserRow {
   institution_id: string | null;
   created_at: string;
   banned_until?: string | null;
+  memberships?: UserMembership[];
 }
+
+type UserCategory = "" | "HR" | "CANDIDATE";
 
 interface UsersResponse {
   items: UserRow[];
@@ -32,9 +44,16 @@ interface UsersResponse {
 
 interface UserDetail {
   profile: UserRow & { bio?: string; location?: string; avatar_url?: string };
-  membership: { institution_id: string; status: string; joined_at: string } | null;
+  memberships: UserMembership[];
   talentDna: { completion_score: number; created_at: string; updated_at: string } | null;
-  recentApplications: { id: string; role_id: string; status: string; created_at: string }[];
+  recentApplications: {
+    id: string;
+    role_id: string;
+    role_title: string | null;
+    institution_name: string | null;
+    status: string;
+    created_at: string;
+  }[];
 }
 
 function dateLocale(locale: string) {
@@ -52,13 +71,15 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
   useEffect(() => {
     setLoading(true);
     apiFetch(adminUserByIdApi(userId)).then((d) => {
-      setDetail(d as UserDetail | null);
+      const typed = d as UserDetail | null;
+      // apiFetch returns an error object (not null) on 401/403.
+      setDetail(typed && "profile" in typed ? typed : null);
       setLoading(false);
     });
   }, [userId]);
 
   const statusColor = (s: string) => {
-    if (s === "ACTIVE")    return "text-[var(--success)] bg-[var(--success-bg)]";
+    if (s === "ACTIVE" || s === "OWNER" || s === "ADMIN") return "text-[var(--success)] bg-[var(--success-bg)]";
     if (s === "SUSPENDED") return "text-[var(--error)] bg-[var(--error-bg)]";
     return "text-[var(--text-muted)] bg-[var(--bg-raised)]";
   };
@@ -144,24 +165,31 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                 <Building2 size={13} className="text-[var(--text-muted)]" />
                 <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">{tr("admin.users.sectionInstitution", "Institution")}</span>
               </div>
-              {detail.membership ? (
-                <div className="bg-[var(--bg-raised)] rounded-lg p-3 space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">{tr("admin.users.fieldInstitutionId", "ID institution")}</span>
-                    <span className="font-mono text-[var(--text-secondary)]">{detail.membership.institution_id.slice(0, 12)}…</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">{tr("admin.users.fieldMemberStatus", "Statut membre")}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${statusColor(detail.membership.status)}`}>
-                      {detail.membership.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--text-muted)]">{tr("admin.users.fieldJoinedAt", "Rejoint le")}</span>
-                    <span className="text-[var(--text-secondary)]">
-                      {new Date(detail.membership.joined_at).toLocaleDateString(dateLocale(locale))}
-                    </span>
-                  </div>
+              {detail.memberships.length > 0 ? (
+                <div className="space-y-1.5">
+                  {detail.memberships.map((m) => (
+                    <div key={m.institution_id} className="bg-[var(--bg-raised)] rounded-lg p-3 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs gap-2">
+                        <span className="text-[var(--text-primary)] font-medium truncate">{m.institution_name ?? m.institution_id}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${statusColor(m.status)}`}>
+                          {m.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[var(--text-muted)]">{tr("admin.users.fieldMemberRole", "Rôle")}</span>
+                        <span className="text-[var(--text-secondary)]">{m.role_custom_label || m.role_specialization || "—"}</span>
+                      </div>
+                      {m.joined_at && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[var(--text-muted)]">{tr("admin.users.fieldJoinedAt", "Rejoint le")}</span>
+                          <span className="text-[var(--text-secondary)]">
+                            {new Date(m.joined_at).toLocaleDateString(dateLocale(locale))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
                 </div>
               ) : (
                 <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.users.noInstitution", "Aucune institution")}</p>
@@ -211,12 +239,15 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
               ) : (
                 <div className="space-y-1.5">
                   {detail.recentApplications.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between bg-[var(--bg-raised)] rounded-lg px-3 py-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <Calendar size={11} className="text-[var(--text-muted)]" />
-                        <span className="text-[var(--text-muted)]">
-                          {new Date(a.created_at).toLocaleDateString(dateLocale(locale))}
-                        </span>
+                    <div key={a.id} className="flex items-center justify-between gap-2 bg-[var(--bg-raised)] rounded-lg px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <div className="text-[var(--text-primary)] font-medium truncate">{a.role_title ?? "—"}</div>
+                        <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
+                          <Calendar size={11} />
+                          <span className="truncate">
+                            {a.institution_name ?? "—"} · {new Date(a.created_at).toLocaleDateString(dateLocale(locale))}
+                          </span>
+
                       </div>
                       <span className={`font-medium ${appStatusColor(a.status)}`}>{a.status}</span>
                     </div>
@@ -244,12 +275,19 @@ export default function AdminUsersPage() {
   const [actionId, setActionId]       = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
   const [selectedUser, setSelectedUser]   = useState<string | null>(null);
+  const [category, setCategory]           = useState<UserCategory>("");
+  // Only the latest request may update the table: a slower, older response (e.g. the
+  // unfiltered initial load) used to overwrite the result of a newer filter.
+  const latestRequest = useRef(0);
 
-  const load = useCallback((page = 1, q = search) => {
+  const load = useCallback((page = 1, q = search, cat: UserCategory = category) => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: "20" });
     if (q) params.set("search", q);
+    if (cat) params.set("role", cat);
     apiFetch(withParams(adminUsersApi, params.toString())).then((res) => {
+      if (requestId !== latestRequest.current) return;
       const typed = res as UsersResponse | null;
       if (typed) {
         setUsers(typed.items ?? []);
@@ -257,7 +295,7 @@ export default function AdminUsersPage() {
       }
       setLoading(false);
     });
-  }, [search]);
+  }, [search, category]);
 
   useEffect(() => { load(1, ""); }, []);
 
@@ -313,6 +351,20 @@ export default function AdminUsersPage() {
         >
           {tr("admin.users.searchButton", "Rechercher")}
         </button>
+        <select
+          value={category}
+          onChange={(e) => {
+            const next = e.target.value as UserCategory;
+            setCategory(next);
+            load(1, search, next);
+          }}
+          aria-label={tr("admin.users.filterCategory", "Catégorie")}
+          className="px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+        >
+          <option value="">{tr("admin.users.filterAll", "Tous")}</option>
+          <option value="HR">{tr("admin.users.filterHr", "Membres d'entreprise")}</option>
+          <option value="CANDIDATE">{tr("admin.users.filterCandidates", "Candidats")}</option>
+        </select>
       </form>
 
       {/* Table */}
@@ -322,6 +374,7 @@ export default function AdminUsersPage() {
             <tr className="border-b border-[var(--border)]">
               <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableUser", "Utilisateur")}</th>
               <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableRole", "Rôle")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableInstitution", "Entreprise")}</th>
               <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableCreatedAt", "Inscrit le")}</th>
               <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.users.tableStatus", "Statut")}</th>
               <th className="px-4 py-3" />
@@ -329,9 +382,9 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.users.loading", "Chargement…")}</td></tr>
+              <tr><td colSpan={6} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.users.loading", "Chargement…")}</td></tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.users.empty", "Aucun utilisateur")}</td></tr>
+              <tr><td colSpan={6} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.users.empty", "Aucun utilisateur")}</td></tr>
             ) : users.map((u) => {
               const isBanned = u.banned_until && u.banned_until !== "none";
               const isActing = actionId === u.id;
@@ -353,6 +406,11 @@ export default function AdminUsersPage() {
                     }`}>
                       {u.role}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-[var(--text-secondary)]">
+                    {u.memberships && u.memberships.length > 0
+                      ? u.memberships.map((m) => `${m.institution_name ?? "—"} · ${m.role_specialization ?? m.status}`).join(", ")
+                      : "—"}
                   </td>
                   <td className="px-4 py-3 text-[var(--text-secondary)]">
                     {new Date(u.created_at).toLocaleDateString(dLoc)}

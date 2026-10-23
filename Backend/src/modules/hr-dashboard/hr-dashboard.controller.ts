@@ -36,7 +36,7 @@ export const getDashboardStats = asyncHandler(
       supabaseAdmin.from("applications").select("id", { count: "exact", head: true }).in("role_id", safeRoleIds).eq("status", "ANALYSING"),
       supabaseAdmin.from("applications").select("id", { count: "exact", head: true }).in("role_id", safeRoleIds).eq("status", "VALIDATED"),
       supabaseAdmin.from("applications").select("id", { count: "exact", head: true }).in("role_id", safeRoleIds).eq("status", "REJECTED"),
-      supabaseAdmin.from("institution_members").select("id", { count: "exact", head: true }).eq("institution_id", institutionId).in("status", ["OWNER", "ACTIVE"]),
+      supabaseAdmin.from("institution_members").select("id", { count: "exact", head: true }).eq("institution_id", institutionId).in("status", ["OWNER", "ADMIN", "ACTIVE"]),
     ]);
 
     res.status(200).json({
