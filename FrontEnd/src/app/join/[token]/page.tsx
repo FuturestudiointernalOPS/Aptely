@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, AlertCircle, Loader2, ArrowRight } from "lucide-react";
-import { apiFetch, refreshHrSessionIfPossible } from "@/lib/apiHelper";
+import { apiFetch, isApiSuccess, refreshHrSessionIfPossible } from "@/lib/apiHelper";
 import { useAuth } from "@/lib/auth";
 import { getClientLocale, t } from "@/lib/i18n";
 import {
@@ -71,7 +71,8 @@ export default function JoinPage() {
       const res = await apiFetch(institutionInviteJoinApi(token), "HR", {
         method: "POST",
       });
-      if (!res) {
+      // apiFetch returns a truthy error object on 401/403: check for real success.
+      if (!isApiSuccess(res)) {
         setError(
           tr(
             "join.joinFailed",
