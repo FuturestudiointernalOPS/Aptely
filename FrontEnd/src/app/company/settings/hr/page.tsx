@@ -212,13 +212,12 @@ export default function TeamManagementPage() {
     return getStatusLabel(m.membershipStatus, translate);
   };
 
-  const teamMembers = useMemo(
-    () =>
-      members.filter(
-        (m) => m.email.toLowerCase() !== (user?.email || "").toLowerCase(),
-      ),
-    [members, user?.email],
-  );
+  // The whole team, current user included: excluding them made the "current team"
+  // count one short of the real number of members. Actions on oneself are already
+  // blocked by the rank/permission gates below.
+  const teamMembers = members;
+  const isSelf = (m: HRMember) =>
+    m.email.toLowerCase() === (user?.email || "").toLowerCase();
 
   const filteredMembers = useMemo(() => {
     const query = memberQuery.trim().toLowerCase();
@@ -904,6 +903,11 @@ export default function TeamManagementPage() {
                     <div className="flex items-center gap-2">
                       <p className="text-[var(--text-primary)] font-semibold text-sm truncate">
                         {m.fullName || m.email}
+                        {isSelf(m) && (
+                          <span className="ml-1.5 font-normal text-[var(--text-muted)]">
+                            ({translate("institution.hr.you", "vous")})
+                          </span>
+                        )}
                       </p>
                       <span
                         className={`px-2 py-0.5 text-xs font-bold rounded-full ${
