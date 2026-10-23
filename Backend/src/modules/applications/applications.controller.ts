@@ -254,7 +254,7 @@ export const listApplications = asyncHandler(
         id, status, match_score, created_at, updated_at, dna_snapshot,
         roles(id, status, institution_id, role_dna(full_form_json)),
         profiles!candidate_id(id, full_name, email, avatar_url),
-        match_results(overall_score)
+        match_results(final_score)
         `,
         { count: "exact" }
       )
@@ -266,7 +266,10 @@ export const listApplications = asyncHandler(
 
     const { data, error, count } = await query;
 
-    if (error) throw new AppError(500, "Failed to fetch applications");
+    if (error) {
+      console.error("[listApplications]", error.message, error.details, error.hint);
+      throw new AppError(500, `Failed to fetch applications: ${error.message}`);
+    }
 
     const normalizedApplications = (data ?? []).map((application: Record<string, unknown>) => {
       const role = application.roles as Record<string, unknown> | undefined;
