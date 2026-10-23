@@ -1215,6 +1215,7 @@ export async function listInstitutionInterviews(
       status,
       interview_type,
       scheduled_at,
+      meeting_location,
       role_snapshot,
       interview_participants(
         user_id,
