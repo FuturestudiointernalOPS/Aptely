@@ -564,6 +564,9 @@ export const removeMember = asyncHandler(
       .eq("id", targetUserId)
       .eq("institution_id", institutionId);
 
+    // Drop the cached membership so the removal applies to the very next request.
+    clearAuthCache(targetUserId);
+
     res.status(200).json({ message: "Member removed successfully" });
   }
 );
