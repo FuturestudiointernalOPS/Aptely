@@ -7,7 +7,7 @@ import {
 } from "@/lib/routes";
 import {
   Search, Trash2, ChevronLeft, ChevronRight, Building2,
-  X, Users, Briefcase, MapPin, Calendar,
+  X, Users, Briefcase, MapPin, Calendar, UserRound,
 } from "lucide-react";
 import { getClientLocale, t } from "@/lib/i18n";
 
@@ -20,6 +20,8 @@ interface InstitutionRow {
   location: string | null;
   stage: string | null;
   created_at: string;
+  member_count?: number;
+  job_posting_count?: number;
 }
 
 interface InstitutionsResponse {
@@ -31,22 +33,49 @@ interface InstitutionsResponse {
 
 interface InstitutionMember {
   user_id: string;
-  role_specialization: string;
+  full_name: string | null;
+  email: string | null;
+  role_specialization: string | null;
+  role_custom_label: string | null;
   status: string;
   joined_at: string;
 }
 
-interface JobPosition {
+interface JobPosting {
   id: string;
-  title: string;
+  title: string | null;
   status: string;
   created_at: string;
 }
 
+interface InstitutionCandidate {
+  application_id: string;
+  candidate_id: string | null;
+  full_name: string | null;
+  email: string | null;
+  role_title: string | null;
+  status: string;
+  applied_at: string;
+}
+
+interface InstitutionStats {
+  totalUsers: number;
+  pendingRequests: number;
+  suspendedMembers: number;
+  totalEmployees: number;
+  hrUsers: number;
+  jobPostings: number;
+  openJobPostings: number;
+  applications: number;
+  candidates: number;
+}
+
 interface InstitutionDetail {
-  institution: InstitutionRow & { description?: string; website?: string; employee_count?: number };
+  institution: InstitutionRow & { description?: string; website?: string };
+  stats: InstitutionStats;
   members: InstitutionMember[];
-  jobPositions: JobPosition[];
+  jobPostings: JobPosting[];
+  candidates: InstitutionCandidate[];
 }
 
 // ─── Institution Detail Drawer ────────────────────────────────────────────────
@@ -60,12 +89,15 @@ const ROLE_COLORS: Record<string, string> = {
   RECRUITER:      "text-[var(--info)] bg-[var(--info-bg)]",
 };
 
+// Job posting (roles.status) colours.
 const JOB_STATUS_COLORS: Record<string, string> = {
-  PUBLISHED: "text-[var(--success)]",
+  ACTIVE:    "text-[var(--success)]",
   DRAFT:     "text-[var(--warning)]",
   CLOSED:    "text-[var(--text-muted)]",
-  ARCHIVED:  "text-[var(--text-muted)]",
+  CANCELLED: "text-[var(--text-muted)]",
 };
+
+const ACTIVE_MEMBER_STATUSES = new Set(["OWNER", "ADMIN", "ACTIVE"]);
 
 function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () => void }) {
   const locale = getClientLocale();
@@ -76,13 +108,24 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
   useEffect(() => {
     setLoading(true);
     apiFetch(adminInstitutionByIdApi(instId)).then((d) => {
-      setDetail(d as InstitutionDetail | null);
+      const typed = d as InstitutionDetail | null;
+      // apiFetch returns an error object (not null) on 401/403.
+      setDetail(typed && "institution" in typed ? typed : null);
       setLoading(false);
     });
   }, [instId]);
 
-  const activeMembers  = detail?.members.filter(m => m.status === "ACTIVE").length ?? 0;
-  const openJobs       = detail?.jobPositions.filter(j => j.status === "PUBLISHED").length ?? 0;
+  const stats = detail?.stats;
+  const statCards: Array<{ label: string; value: number; tone: string }> = stats
+    ? [
+        { label: tr("admin.institutions.statUsers", "Utilisateurs"), value: stats.totalUsers, tone: "text-[var(--text-primary)]" },
+        { label: tr("admin.institutions.statEmployees", "Employés"), value: stats.totalEmployees, tone: "text-[var(--text-primary)]" },
+        { label: tr("admin.institutions.statHrUsers", "Équipe RH"), value: stats.hrUsers, tone: "text-[var(--accent)]" },
+        { label: tr("admin.institutions.statOpenJobs", "Offres ouvertes"), value: stats.openJobPostings, tone: "text-[var(--success)]" },
+        { label: tr("admin.institutions.statApplications", "Candidatures"), value: stats.applications, tone: "text-[var(--text-primary)]" },
+        { label: tr("admin.institutions.statCandidates", "Candidats"), value: stats.candidates, tone: "text-[var(--text-primary)]" },
+      ]
+    : [];
 
   return (
     <>
@@ -124,27 +167,26 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
               )}
             </div>
 
-            {/* Quick stats */}
+            {/* Stats — computed server-side from the underlying records */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-[var(--bg-raised)] rounded-lg p-3 text-center">
-                <div className="text-xl font-semibold text-[var(--text-primary)]">{detail.members.length}</div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">{tr("admin.institutions.statMembers", "Membres")}</div>
-              </div>
-              <div className="bg-[var(--bg-raised)] rounded-lg p-3 text-center">
-                <div className="text-xl font-semibold text-[var(--success)]">{activeMembers}</div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">{tr("admin.institutions.statActive", "Actifs")}</div>
-              </div>
-              <div className="bg-[var(--bg-raised)] rounded-lg p-3 text-center">
-                <div className="text-xl font-semibold text-[var(--accent)]">{openJobs}</div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">{tr("admin.institutions.statOpenJobs", "Postes ouverts")}</div>
-              </div>
+              {statCards.map((c) => (
+                <div key={c.label} className="bg-[var(--bg-raised)] rounded-lg p-3 text-center">
+                  <div className={`text-xl font-semibold ${c.tone}`}>{c.value}</div>
+                  <div className="text-xs text-[var(--text-muted)] mt-0.5">{c.label}</div>
+                </div>
+              ))}
             </div>
+            {stats && (stats.pendingRequests > 0 || stats.suspendedMembers > 0) && (
+              <p className="text-xs text-[var(--text-muted)] -mt-3">
+                {stats.pendingRequests} {tr("admin.institutions.pendingRequests", "demande(s) d'adhésion en attente")} · {stats.suspendedMembers} {tr("admin.institutions.suspendedMembers", "membre(s) suspendu(s)")}
+              </p>
+            )}
 
             {/* Meta */}
             <div className="bg-[var(--bg-raised)] rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[var(--text-muted)]">{tr("admin.institutions.fieldId", "ID")}</span>
-                <span className="font-mono text-[var(--text-secondary)]">{detail.institution.id.slice(0, 16)}…</span>
+                <span className="font-mono text-[var(--text-secondary)]">{detail.institution.id}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[var(--text-muted)]">{tr("admin.institutions.fieldStage", "Stage")}</span>
@@ -158,7 +200,7 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
               </div>
             </div>
 
-            {/* Members */}
+            {/* Members — who they are, their role and status */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Users size={13} className="text-[var(--text-muted)]" />
@@ -170,46 +212,70 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
                 <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.institutions.noMembers", "Aucun membre")}</p>
               ) : (
                 <div className="space-y-1.5">
-                  {detail.members.slice(0, 10).map((m) => (
-                    <div key={m.user_id} className="flex items-center justify-between bg-[var(--bg-raised)] rounded-lg px-3 py-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[m.role_specialization] ?? "text-[var(--text-muted)] bg-[var(--bg-raised)]"}`}>
-                          {m.role_specialization}
+                  {detail.members.map((m) => (
+                    <div key={m.user_id} className="flex items-center justify-between gap-2 bg-[var(--bg-raised)] rounded-lg px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <div className="text-[var(--text-primary)] font-medium truncate">{m.full_name || m.email || m.user_id}</div>
+                        {m.email && <div className="text-[var(--text-muted)] truncate">{m.email}</div>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[m.role_specialization ?? ""] ?? "text-[var(--text-muted)] bg-[var(--bg-surface)]"}`}>
+                          {m.role_custom_label || m.role_specialization || "—"}
+                        </span>
+                        <span className={ACTIVE_MEMBER_STATUSES.has(m.status) ? "text-[var(--success)]" : "text-[var(--error)]"}>
+                          {m.status}
                         </span>
                       </div>
-                      <span className={m.status === "ACTIVE" ? "text-[var(--success)]" : "text-[var(--error)]"}>
-                        {m.status}
-                      </span>
                     </div>
                   ))}
-                  {detail.members.length > 10 && (
-                    <p className="text-xs text-[var(--text-muted)] text-center pt-1">
-                      +{detail.members.length - 10} {tr("admin.institutions.moreMembers", "membres supplémentaires")}
-                    </p>
-                  )}
                 </div>
               )}
             </div>
 
-            {/* Job positions */}
+            {/* Job postings (roles) */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase size={13} className="text-[var(--text-muted)]" />
                 <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
-                  {tr("admin.institutions.sectionJobPositions", "Fiches de poste")} ({detail.jobPositions.length})
+                  {tr("admin.institutions.sectionJobPositions", "Fiches de poste")} ({detail.jobPostings.length})
                 </span>
               </div>
-              {detail.jobPositions.length === 0 ? (
+              {detail.jobPostings.length === 0 ? (
                 <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.institutions.noJobPositions", "Aucune fiche de poste")}</p>
               ) : (
                 <div className="space-y-1.5">
-                  {detail.jobPositions.map((j) => (
+                  {detail.jobPostings.map((j) => (
                     <div key={j.id} className="flex items-center justify-between bg-[var(--bg-raised)] rounded-lg px-3 py-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <Calendar size={11} className="text-[var(--text-muted)]" />
-                        <span className="text-[var(--text-primary)] font-medium truncate max-w-[160px]">{j.title}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Calendar size={11} className="text-[var(--text-muted)] shrink-0" />
+                        <span className="text-[var(--text-primary)] font-medium truncate">{j.title || tr("admin.institutions.untitledJob", "Sans titre")}</span>
                       </div>
                       <span className={JOB_STATUS_COLORS[j.status] ?? "text-[var(--text-muted)]"}>{j.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Candidates in the enterprise's recruitment process */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <UserRound size={13} className="text-[var(--text-muted)]" />
+                <span className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
+                  {tr("admin.institutions.sectionCandidates", "Candidats")} ({detail.stats.candidates})
+                </span>
+              </div>
+              {detail.candidates.length === 0 ? (
+                <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.institutions.noCandidates", "Aucune candidature")}</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {detail.candidates.map((c) => (
+                    <div key={c.application_id} className="flex items-center justify-between gap-2 bg-[var(--bg-raised)] rounded-lg px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <div className="text-[var(--text-primary)] font-medium truncate">{c.full_name || c.email || "—"}</div>
+                        <div className="text-[var(--text-muted)] truncate">{c.role_title || "—"}</div>
+                      </div>
+                      <span className="text-[var(--text-secondary)] shrink-0">{c.status}</span>
                     </div>
                   ))}
                 </div>
@@ -299,16 +365,18 @@ export default function AdminInstitutionsPage() {
               <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableName", "Entreprise")}</th>
               <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableSector", "Secteur")}</th>
               <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableLocation", "Localisation")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableMembers", "Membres")}</th>
+              <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableJobPostings", "Offres")}</th>
               <th className="text-left px-4 py-3 text-xs text-[var(--text-muted)] font-medium uppercase tracking-wide">{tr("admin.institutions.tableCreatedAt", "Inscrite le")}</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.institutions.loading", "Chargement…")}</td></tr>
+              <tr><td colSpan={7} className="text-center py-12 text-[var(--text-muted)]">{tr("admin.institutions.loading", "Chargement…")}</td></tr>
             ) : institutions.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-12">
+                <td colSpan={7} className="text-center py-12">
                   <Building2 size={32} className="mx-auto mb-2 text-[var(--text-muted)] opacity-40" />
                   <p className="text-sm text-[var(--text-muted)]">{tr("admin.institutions.empty", "Aucune entreprise")}</p>
                 </td>
@@ -327,6 +395,8 @@ export default function AdminInstitutionsPage() {
                   </td>
                   <td className="px-4 py-3 text-[var(--text-secondary)]">{inst.sector ?? "—"}</td>
                   <td className="px-4 py-3 text-[var(--text-secondary)]">{inst.location ?? "—"}</td>
+                  <td className="px-4 py-3 text-[var(--text-secondary)]">{inst.member_count ?? "—"}</td>
+                  <td className="px-4 py-3 text-[var(--text-secondary)]">{inst.job_posting_count ?? "—"}</td>
                   <td className="px-4 py-3 text-[var(--text-secondary)]">
                     {new Date(inst.created_at).toLocaleDateString("fr-FR")}
                   </td>

@@ -5,6 +5,49 @@ import { asyncHandler } from "@/utils/helpers";
 import { paginate } from "@/utils/helpers";
 import type { AuthenticatedRequest } from "@/middleware/auth.middleware";
 import type { ListUsersQuery, ListInstitutionsQuery } from "./admin.schema";
+import { deriveRoleFieldsFromFullForm } from "@/modules/roles/role-form.mapper";
+
+// ─── Helpers (enterprise / user relationships) ───────────────────────────────
+
+/** Membership statuses that count as a working member of an enterprise. */
+const ACTIVE_MEMBER_STATUSES = new Set(["OWNER", "ADMIN", "ACTIVE"]);
+/** Built-in roles that make up the enterprise's HR / recruitment team. */
+const HR_TEAM_ROLES = new Set(["HR_LEAD", "STANDARD_HR", "RECRUITER", "HIRING_MANAGER"]);
+
+type ProfileLite = { id: string; email: string | null; full_name: string | null; role: string | null };
+
+async function profilesById(ids: string[]): Promise<Map<string, ProfileLite>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("id, email, full_name, role")
+    .in("id", unique);
+  return new Map((data ?? []).map((p) => [p.id as string, p as ProfileLite]));
+}
+
+/** Job posting titles live in role_dna.full_form_json (roles has no title column). */
+async function roleTitlesById(roleIds: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(roleIds.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const { data } = await supabaseAdmin
+    .from("role_dna")
+    .select("role_id, full_form_json")
+    .in("role_id", unique);
+  return new Map(
+    (data ?? []).map((r) => [
+      r.role_id as string,
+      deriveRoleFieldsFromFullForm((r.full_form_json ?? {}) as Record<string, unknown>).title,
+    ])
+  );
+}
+
+async function institutionNamesById(ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const { data } = await supabaseAdmin.from("institutions").select("id, name").in("id", unique);
+  return new Map((data ?? []).map((i) => [i.id as string, i.name as string]));
+}
 
 // ─── GET /admin/stats ─────────────────────────────────────────────────────────
 
@@ -83,8 +126,40 @@ export const listUsers = asyncHandler(
 
     if (error) throw new AppError(500, "Failed to fetch users");
 
+    // Organisational relationship of each user (§3 step 8): enterprise + role.
+    const userIds = (data ?? []).map((u) => u.id as string);
+    const { data: memberRows } = userIds.length
+      ? await supabaseAdmin
+          .from("institution_members")
+          .select("user_id, institution_id, role_specialization, status")
+          .in("user_id", userIds)
+      : { data: [] };
+    const instNames = await institutionNamesById((memberRows ?? []).map((m) => m.institution_id as string));
+    // Suspension lives on auth.users (ban), not on profiles: without it the list
+    // showed every account as active and offered to suspend an already suspended one.
+    const bans = new Map(
+      await Promise.all(
+        userIds.map(async (uid) => {
+          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(uid);
+          return [uid, (authUser?.user as { banned_until?: string | null } | undefined)?.banned_until ?? null] as const;
+        })
+      )
+    );
+    const items = (data ?? []).map((u) => ({
+      ...u,
+      banned_until: bans.get(u.id as string) ?? null,
+      memberships: (memberRows ?? [])
+        .filter((m) => m.user_id === u.id)
+        .map((m) => ({
+          institution_id: m.institution_id,
+          institution_name: instNames.get(m.institution_id as string) ?? null,
+          role_specialization: m.role_specialization ?? null,
+          status: m.status,
+        })),
+    }));
+
     res.status(200).json({
-      items: data,
+      items,
       total: count ?? 0,
       page: parseInt(page ?? "1", 10),
       limit: take,
@@ -117,12 +192,13 @@ export const getUserById = asyncHandler(
 
     // Données supplémentaires selon le rôle — en parallèle
     const [membershipRes, talentRes, applicationsRes] = await Promise.all([
-      // Institution (si HR)
+      // Entreprises (un utilisateur peut appartenir à plusieurs ; .maybeSingle()
+      // échouait dans ce cas et renvoyait null).
       supabaseAdmin
         .from("institution_members")
-        .select("institution_id, status, joined_at")
+        .select("institution_id, role_specialization, role_custom_label, status, joined_at")
         .eq("user_id", id)
-        .maybeSingle(),
+        .order("joined_at", { ascending: true }),
       // Talent DNA (si CANDIDATE)
       supabaseAdmin
         .from("talent_dna")
@@ -138,11 +214,48 @@ export const getUserById = asyncHandler(
         .limit(10),
     ]);
 
+    const memberships = membershipRes.data ?? [];
+    const applications = applicationsRes.data ?? [];
+
+    // Resolve the enterprise behind each application (role → institution) and the
+    // human-readable names, so the Super Admin can check every relationship.
+    const roleIds = applications.map((a) => a.role_id as string);
+    const { data: roleRows } = roleIds.length
+      ? await supabaseAdmin.from("roles").select("id, institution_id").in("id", roleIds)
+      : { data: [] };
+    const roleInst = new Map((roleRows ?? []).map((r) => [r.id as string, r.institution_id as string]));
+    const [instNames, titles] = await Promise.all([
+      institutionNamesById([
+        ...memberships.map((m) => m.institution_id as string),
+        ...(roleRows ?? []).map((r) => r.institution_id as string),
+      ]),
+      roleTitlesById(roleIds),
+    ]);
+
+    const membershipList = memberships.map((m) => ({
+      institution_id: m.institution_id,
+      institution_name: instNames.get(m.institution_id as string) ?? null,
+      role_specialization: m.role_specialization ?? null,
+      role_custom_label: m.role_custom_label ?? null,
+      status: m.status,
+      joined_at: m.joined_at,
+    }));
+
     res.status(200).json({
       profile,
-      membership: membershipRes.data ?? null,
+      memberships: membershipList,
+      // Kept for backward compatibility with older clients: first membership.
+      membership: membershipList[0] ?? null,
       talentDna: talentRes.data ?? null,
-      recentApplications: applicationsRes.data ?? [],
+      recentApplications: applications.map((a) => {
+        const instId = roleInst.get(a.role_id as string) ?? null;
+        return {
+          ...a,
+          role_title: titles.get(a.role_id as string) ?? null,
+          institution_id: instId,
+          institution_name: instId ? instNames.get(instId) ?? null : null,
+        };
+      }),
     });
   }
 );
@@ -255,8 +368,24 @@ export const listInstitutions = asyncHandler(
 
     if (error) throw new AppError(500, "Failed to fetch institutions");
 
+    // Per-enterprise counts for the list (§3: users, job postings at a glance).
+    const ids = (data ?? []).map((i) => i.id as string);
+    const [{ data: memberRows }, { data: roleRows }] = ids.length
+      ? await Promise.all([
+          supabaseAdmin.from("institution_members").select("institution_id, status").in("institution_id", ids),
+          supabaseAdmin.from("roles").select("institution_id, status").in("institution_id", ids),
+        ])
+      : [{ data: [] }, { data: [] }];
+    const items = (data ?? []).map((inst) => ({
+      ...inst,
+      member_count: (memberRows ?? []).filter(
+        (m) => m.institution_id === inst.id && ACTIVE_MEMBER_STATUSES.has(m.status as string)
+      ).length,
+      job_posting_count: (roleRows ?? []).filter((r) => r.institution_id === inst.id).length,
+    }));
+
     res.status(200).json({
-      items: data,
+      items,
       total: count ?? 0,
       page: parseInt(page ?? "1", 10),
       limit: take,
@@ -287,21 +416,22 @@ export const getMetrics = asyncHandler(
     const since30d = new Date(Date.now() - 30 * 86400000).toISOString();
     const prevMonth30d = new Date(Date.now() - 60 * 86400000).toISOString();
 
+    // Job postings are `roles`; job_positions are internal org-chart positions.
     const [jobsRes, appsRes, usersRes, activeInstRes, prevActiveInstRes, funnelCounts, acceptedOffersRes] =
       await Promise.all([
-        supabaseAdmin.from("job_positions").select("created_at").gte("created_at", since8w),
+        supabaseAdmin.from("roles").select("created_at").gte("created_at", since8w),
         supabaseAdmin.from("applications").select("created_at").gte("created_at", since8w),
         supabaseAdmin.from("profiles").select("created_at").gte("created_at", since8w),
         // Active this month: institutions with job postings in last 30d
-        supabaseAdmin.from("job_positions").select("institution_id").gte("created_at", since30d),
+        supabaseAdmin.from("roles").select("institution_id").gte("created_at", since30d),
         // Active prev month: institutions with job postings 60d–30d ago
         supabaseAdmin
-          .from("job_positions")
+          .from("roles")
           .select("institution_id")
           .gte("created_at", prevMonth30d)
           .lt("created_at", since30d),
         Promise.all([
-          supabaseAdmin.from("job_positions").select("*", { count: "exact", head: true }),
+          supabaseAdmin.from("roles").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("applications").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("interviews").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("offers").select("*", { count: "exact", head: true }),
@@ -312,7 +442,7 @@ export const getMetrics = asyncHandler(
           .from("offers")
           .select(`
             id, updated_at,
-            applications!inner(created_at, job_positions!inner(institution_id))
+            applications!inner(created_at, roles!inner(institution_id))
           `)
           .eq("status", "ACCEPTED"),
       ]);
@@ -339,7 +469,7 @@ export const getMetrics = asyncHandler(
       updated_at: string;
       applications: {
         created_at: string;
-        job_positions: { institution_id: string }[];
+        roles: { institution_id: string } | { institution_id: string }[];
       }[];
     };
     const acceptedOffers = (acceptedOffersRes.data ?? []) as unknown as AcceptedOfferRow[];
@@ -349,7 +479,8 @@ export const getMetrics = asyncHandler(
 
     for (const offer of acceptedOffers) {
       const app     = offer.applications?.[0];
-      const instId  = app?.job_positions?.[0]?.institution_id;
+      const roleRow = Array.isArray(app?.roles) ? app?.roles[0] : app?.roles;
+      const instId  = roleRow?.institution_id;
       if (instId) {
         hiresPerInst.set(instId, (hiresPerInst.get(instId) ?? 0) + 1);
       }
@@ -401,8 +532,8 @@ export const getActivity = asyncHandler(
         .order("created_at", { ascending: false })
         .limit(15),
       supabaseAdmin
-        .from("job_positions")
-        .select("id, title, created_at")
+        .from("roles")
+        .select("id, created_at")
         .gte("created_at", since7d)
         .order("created_at", { ascending: false })
         .limit(15),
@@ -422,6 +553,7 @@ export const getActivity = asyncHandler(
     ]);
 
     type ActivityEvent = { type: string; label: string; at: string };
+    const jobTitles = await roleTitlesById((jobsRes.data ?? []).map((j) => j.id as string));
 
     const events: ActivityEvent[] = [
       ...(usersRes.data ?? []).map((u) => ({
@@ -431,7 +563,7 @@ export const getActivity = asyncHandler(
       })),
       ...(jobsRes.data ?? []).map((j) => ({
         type: "job_posted",
-        label: j.title as string,
+        label: jobTitles.get(j.id as string) ?? "Fiche de poste",
         at: j.created_at as string,
       })),
       ...(appsRes.data ?? []).map((a) => ({
@@ -458,7 +590,9 @@ export const getInstitutionById = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { id } = req.params;
 
-    const [instRes, membersRes, jobsRes] = await Promise.all([
+    // Job postings are `roles` (job_positions are internal org-chart positions and
+    // have no status column — querying it failed silently and always returned []).
+    const [instRes, membersRes, rolesRes, employeesRes] = await Promise.all([
       supabaseAdmin
         .from("institutions")
         .select("*")
@@ -466,22 +600,98 @@ export const getInstitutionById = asyncHandler(
         .maybeSingle(),
       supabaseAdmin
         .from("institution_members")
-        .select("user_id, role_specialization, status, joined_at")
-        .eq("institution_id", id),
-      supabaseAdmin
-        .from("job_positions")
-        .select("id, title, status, created_at")
+        .select("user_id, role_specialization, role_custom_label, status, joined_at")
         .eq("institution_id", id)
-        .order("created_at", { ascending: false })
-        .limit(10),
+        .order("joined_at", { ascending: true }),
+      supabaseAdmin
+        .from("roles")
+        .select("id, status, created_at")
+        .eq("institution_id", id)
+        .order("created_at", { ascending: false }),
+      supabaseAdmin
+        .from("employee_records")
+        .select("id", { count: "exact", head: true })
+        .eq("institution_id", id),
     ]);
 
+    if (instRes.error || membersRes.error || rolesRes.error) {
+      throw new AppError(500, "Failed to fetch institution details");
+    }
     if (!instRes.data) throw new AppError(404, "Institution not found");
+
+    const memberRows = membersRes.data ?? [];
+    const roleRows = rolesRes.data ?? [];
+    const roleIds = roleRows.map((r) => r.id as string);
+
+    const { data: appRows, error: appError } = roleIds.length
+      ? await supabaseAdmin
+          .from("applications")
+          .select("id, candidate_id, role_id, status, created_at")
+          .in("role_id", roleIds)
+          .order("created_at", { ascending: false })
+      : { data: [], error: null };
+    if (appError) throw new AppError(500, "Failed to fetch institution applications");
+    const applications = appRows ?? [];
+
+    const [profiles, titles] = await Promise.all([
+      profilesById([
+        ...memberRows.map((m) => m.user_id as string),
+        ...applications.map((a) => a.candidate_id as string),
+      ]),
+      roleTitlesById(roleIds),
+    ]);
+
+    const members = memberRows.map((m) => {
+      const p = profiles.get(m.user_id as string);
+      return {
+        user_id: m.user_id,
+        full_name: p?.full_name ?? null,
+        email: p?.email ?? null,
+        role_specialization: m.role_specialization ?? null,
+        role_custom_label: m.role_custom_label ?? null,
+        status: m.status,
+        joined_at: m.joined_at,
+      };
+    });
+
+    const activeMembers = members.filter((m) => ACTIVE_MEMBER_STATUSES.has(m.status as string));
+    const candidateIds = new Set(applications.map((a) => a.candidate_id as string).filter(Boolean));
 
     res.status(200).json({
       institution: instRes.data,
-      members: membersRes.data ?? [],
-      jobPositions: jobsRes.data ?? [],
+      stats: {
+        // Users = active members of the enterprise (pending requests / suspended excluded).
+        totalUsers: activeMembers.length,
+        pendingRequests: members.filter((m) => m.status === "PENDING").length,
+        suspendedMembers: members.filter((m) => m.status === "SUSPENDED").length,
+        // Employees = HR employee records (Phase 4 staff module).
+        totalEmployees: employeesRes.count ?? 0,
+        hrUsers: activeMembers.filter((m) => HR_TEAM_ROLES.has(m.role_specialization as string)).length,
+        jobPostings: roleRows.length,
+        openJobPostings: roleRows.filter((r) => r.status === "ACTIVE").length,
+        applications: applications.length,
+        candidates: candidateIds.size,
+      },
+      members,
+      jobPostings: roleRows.map((r) => ({
+        id: r.id,
+        title: titles.get(r.id as string) ?? null,
+        status: r.status,
+        created_at: r.created_at,
+      })),
+      candidates: applications.slice(0, 50).map((a) => {
+        const p = profiles.get(a.candidate_id as string);
+        return {
+          application_id: a.id,
+          candidate_id: a.candidate_id,
+          full_name: p?.full_name ?? null,
+          email: p?.email ?? null,
+          role_id: a.role_id,
+          role_title: titles.get(a.role_id as string) ?? null,
+          status: a.status,
+          applied_at: a.created_at,
+        };
+      }),
     });
   }
 );

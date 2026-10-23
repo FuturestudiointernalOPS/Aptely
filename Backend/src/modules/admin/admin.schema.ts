@@ -10,7 +10,8 @@ export const paginationSchema = z.object({
 
 // ─── GET /admin/users — filtres optionnels ────────────────────────────────────
 export const listUsersQuerySchema = paginationSchema.extend({
-  role: z.enum(["HR"]).optional(),
+  // HR = enterprise members, CANDIDATE = Talents (§3: identify users by category).
+  role: z.enum(["HR", "CANDIDATE"]).optional(),
   search: z.string().max(100).optional(), // filtre sur email ou full_name
 });
 
