@@ -254,7 +254,7 @@ export const listApplications = asyncHandler(
         id, status, match_score, created_at, updated_at, dna_snapshot,
         roles(id, status, institution_id, role_dna(full_form_json)),
         profiles!candidate_id(id, full_name, email, avatar_url),
-        match_results(overall_score)
+        match_results(final_score)
         `,
         { count: "exact" }
       )

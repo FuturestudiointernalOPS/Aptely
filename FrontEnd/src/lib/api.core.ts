@@ -258,9 +258,20 @@ export async function createRoleWithDna(payload: {
 
 // ────────── All Applications ──────────
 export async function getAllApplications(): Promise<Application[]> {
-  const timestamp = Date.now();
-  const apps = await apiFetch(withParams(mkApiPath("/applications"), `t=${timestamp}`), "HR", { cache: "no-store" });
-  if (!Array.isArray(apps)) return [];
+  // GET /applications is paginated ({ data, meta }) and apiFetch keeps that envelope:
+  // reading it as an array made the Applications page always empty. Walk every page.
+  const apps: any[] = [];
+  for (let page = 1; page <= 50; page++) {
+    const res = await apiFetch(
+      withParams(mkApiPath("/applications"), `page=${page}&limit=100&t=${Date.now()}`),
+      "HR",
+      { cache: "no-store" },
+    );
+    const batch: any[] = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+    apps.push(...batch);
+    const total = Number(res?.meta?.total ?? batch.length);
+    if (batch.length === 0 || apps.length >= total) break;
+  }
   return apps.map((a: any) => ({
     applicationId: a.id || a.applicationId,
     candidateId: safeEntityId(a.candidate_id) || safeEntityId(a.candidateId),
