@@ -146,8 +146,10 @@ export const DEFAULT_PERMISSIONS: Record<string, InstitutionPermission[]> = {
     "goals.view", "goals.manage",
     "learning.manage",
   ],
-  MEMBER: ["applications.view", "analytics.view"],
-  ACTIVE: ["applications.view", "analytics.view"],
+  // Members are employees without recruitment duties — must not see applicant PII.
+  // (Partie-2 S7: MEMBER deep-link /applications returned 8 candidatures — Critical.)
+  MEMBER: [],
+  ACTIVE: [],
   CUSTOM: [], // CUSTOM gets no defaults — permissions must be set explicitly via institution_role_permissions
 };
 

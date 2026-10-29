@@ -178,7 +178,7 @@ export const listUsers = asyncHandler(
  */
 export const getUserById = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params["id"] as string;
 
     // Profil de base
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -191,7 +191,7 @@ export const getUserById = asyncHandler(
     if (!profile) throw new AppError(404, "User not found");
 
     // Données supplémentaires selon le rôle — en parallèle
-    const [membershipRes, talentRes, applicationsRes] = await Promise.all([
+    const [membershipRes, talentRes, applicationsRes, authUserRes] = await Promise.all([
       // Entreprises (un utilisateur peut appartenir à plusieurs ; .maybeSingle()
       // échouait dans ce cas et renvoyait null).
       supabaseAdmin
@@ -205,13 +205,13 @@ export const getUserById = asyncHandler(
         .select("completion_score, created_at, updated_at")
         .eq("candidate_id", id)
         .maybeSingle(),
-      // Candidatures
       supabaseAdmin
         .from("applications")
         .select("id, role_id, status, created_at")
         .eq("candidate_id", id)
         .order("created_at", { ascending: false })
         .limit(10),
+      supabaseAdmin.auth.admin.getUserById(id),
     ]);
 
     const memberships = membershipRes.data ?? [];
@@ -242,7 +242,7 @@ export const getUserById = asyncHandler(
     }));
 
     res.status(200).json({
-      profile,
+      profile: { ...profile, banned_until: authUserRes.data.user?.banned_until ?? null },
       memberships: membershipList,
       // Kept for backward compatibility with older clients: first membership.
       membership: membershipList[0] ?? null,
@@ -437,7 +437,7 @@ export const getMetrics = asyncHandler(
           supabaseAdmin.from("offers").select("*", { count: "exact", head: true }),
           supabaseAdmin.from("offers").select("*", { count: "exact", head: true }).eq("status", "ACCEPTED"),
         ]),
-        // Accepted offers with application chain for PMF metrics
+        // Accepted offers → application → role (institution)
         supabaseAdmin
           .from("offers")
           .select(`
@@ -464,13 +464,14 @@ export const getMetrics = asyncHandler(
       : null;
 
     // Repeat hiring: institutions with >= 2 accepted offers
+    // Supabase may return nested relations as object or array depending on cardinality.
+    type RoleNest = { institution_id: string } | { institution_id: string }[];
     type AcceptedOfferRow = {
       id: string;
       updated_at: string;
-      applications: {
-        created_at: string;
-        roles: { institution_id: string } | { institution_id: string }[];
-      }[];
+      applications:
+        | { created_at: string; roles: RoleNest }
+        | { created_at: string; roles: RoleNest }[];
     };
     const acceptedOffers = (acceptedOffersRes.data ?? []) as unknown as AcceptedOfferRow[];
 
@@ -478,9 +479,11 @@ export const getMetrics = asyncHandler(
     const timesToHireMs: number[] = [];
 
     for (const offer of acceptedOffers) {
-      const app     = offer.applications?.[0];
-      const roleRow = Array.isArray(app?.roles) ? app?.roles[0] : app?.roles;
-      const instId  = roleRow?.institution_id;
+      const appRaw = offer.applications;
+      const app = Array.isArray(appRaw) ? appRaw[0] : appRaw;
+      const rolesRaw = app?.roles;
+      const role = Array.isArray(rolesRaw) ? rolesRaw[0] : rolesRaw;
+      const instId = role?.institution_id;
       if (instId) {
         hiresPerInst.set(instId, (hiresPerInst.get(instId) ?? 0) + 1);
       }
@@ -568,12 +571,13 @@ export const getActivity = asyncHandler(
       })),
       ...(appsRes.data ?? []).map((a) => ({
         type: "application",
-        label: `Candidature #${(a.id as string).slice(0, 6)}`,
+        // Neutral label — front localizes via type; keep id fragment for uniqueness
+        label: `Application #${(a.id as string).slice(0, 6)}`,
         at: a.created_at as string,
       })),
       ...(offersRes.data ?? []).map((o) => ({
         type: "offer_accepted",
-        label: `Offre acceptée`,
+        label: "Offer accepted",
         at: o.updated_at as string,
       })),
     ]
@@ -588,7 +592,7 @@ export const getActivity = asyncHandler(
 
 export const getInstitutionById = asyncHandler(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params["id"] as string;
 
     // Job postings are `roles` (job_positions are internal org-chart positions and
     // have no status column — querying it failed silently and always returned []).

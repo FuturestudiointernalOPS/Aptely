@@ -276,7 +276,7 @@ export async function getAllApplications(): Promise<Application[]> {
     applicationId: a.id || a.applicationId,
     candidateId: safeEntityId(a.candidate_id) || safeEntityId(a.candidateId),
     candidateName: a.candidateName || a.profiles?.full_name || "Unknown",
-    roleId: a.role_id || a.roleId || "unknown",
+    roleId: a.role_id || a.roleId || a.roles?.id || "unknown",
     roleTitle: a.roleTitle || a.roles?.title || "Role",
     status: a.status,
     submittedAt: a.submittedAt || a.created_at,

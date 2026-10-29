@@ -266,7 +266,10 @@ export const listApplications = asyncHandler(
 
     const { data, error, count } = await query;
 
-    if (error) throw new AppError(500, "Failed to fetch applications");
+    if (error) {
+      console.error("[listApplications]", error.message, error.details, error.hint);
+      throw new AppError(500, `Failed to fetch applications: ${error.message}`);
+    }
 
     const normalizedApplications = (data ?? []).map((application: Record<string, unknown>) => {
       const role = application.roles as Record<string, unknown> | undefined;
