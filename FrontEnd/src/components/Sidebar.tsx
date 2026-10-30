@@ -60,16 +60,16 @@ const DEFAULT_WIDTH = 220;
 export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, isMobileOpen, setIsMobileOpen }: SidebarProps) {
     const pathname = usePathname();
     const { logout, user } = useAuth();
-    const { active, isPersonal, hasModule, hasPermission } = useWorkspace();
+    const { active, isPersonal, hasModule, hasPermission, roleResolved } = useWorkspace();
     const { theme, setTheme } = useTheme();
     const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
     const [isMobile, setIsMobile] = useState(false);
     // On mobile the drawer is full-width with labels — never the 64px collapsed rail.
     const isCollapsed = isMobile ? false : isCollapsedProp;
     const membershipStatus = useMemo<"OWNER" | "ADMIN" | "ACTIVE" | "PENDING" | "SUSPENDED" | null>(() => {
-        if (active.kind !== "institution") return null;
+        if (active.kind !== "institution" || !roleResolved) return null;
         return active.membership.status;
-    }, [active]);
+    }, [active, roleResolved]);
     const isResizing = useRef(false);
     const currentLocale = useMemo(() => getClientLocale(pathname), [pathname]);
     const pathnameWithoutLocale = useMemo(() => removeLocalePrefix(pathname), [pathname]);
@@ -79,7 +79,7 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
 
     // Human-readable role label for the badge (custom roles show their own name).
     const roleBadge = useMemo<string | null>(() => {
-        if (active.kind !== "institution") return null;
+        if (active.kind !== "institution" || !roleResolved) return null;
         const rs = active.membership.role_specialization;
         const label = active.membership.role_custom_label;
         if (label) return label;  // custom label set for ANY role (incl. OWNER)
@@ -96,7 +96,7 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
         if (active.membership.status === "OWNER") return map.OWNER;
         if (active.membership.status === "ADMIN") return map.ADMIN;
         return map.MEMBER;
-    }, [active, translate]);
+    }, [active, translate, roleResolved]);
 
     const [mounted, setMounted] = useState(false);
 
@@ -287,7 +287,10 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
         { name: translate("nav.settings", "Paramètres"), href: ROUTES.candidate.settings, baseHref: ROUTES.candidate.settings, icon: Settings },
     ] : [];
 
-    const companySections = !isPersonal && user ? getCompanySections() : [];
+    // Until the role is known, show only the dashboard entry (first section) instead of a member menu.
+    const companySections = !isPersonal && user
+        ? (roleResolved ? getCompanySections() : getCompanySections().slice(0, 1))
+        : [];
 
     return (
         <aside
