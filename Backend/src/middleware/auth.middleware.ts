@@ -426,6 +426,13 @@ export const authGuard = async (
     // Legacy/back-compat: if institutionId isn't reliably derived from JWT/profiles,
     // try to resolve from institution_members (OWNER/ADMIN/ACTIVE).
     let institutionId = resolved.institutionId;
+    // The JWT claim (and legacy profile column) can outlive the membership: a member
+    // who was removed or suspended kept their old institution until the token was
+    // refreshed — still reading its data and unable to accept a new invite. Only
+    // keep it if the membership is still active.
+    if (institutionId && !(await isActiveMember(userId, institutionId))) {
+      institutionId = undefined;
+    }
     if (!institutionId) {
       institutionId = await resolveInstitutionIdFromMembership(userId);
     }

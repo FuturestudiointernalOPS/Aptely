@@ -213,7 +213,12 @@ export const getMyApplications = asyncHandler(
       const roleTitle = (dna?.full_form_json?.["title"] as string | undefined) ?? "Untitled Role";
 
       const interviewAssoc = app.interviews as unknown as Array<{ id: string; status: string; scheduled_at?: string | null }> | { id: string; status: string; scheduled_at?: string | null } | null;
-      const interview = Array.isArray(interviewAssoc) ? interviewAssoc[0] ?? null : interviewAssoc;
+      // An application can have several interviews (e.g. technical + culture):
+      // expose them all, ordered by date, instead of only the first one.
+      const interviews = (Array.isArray(interviewAssoc) ? interviewAssoc : interviewAssoc ? [interviewAssoc] : [])
+        .slice()
+        .sort((x, y) => (x.scheduled_at ?? "").localeCompare(y.scheduled_at ?? ""));
+      const interview = interviews[0] ?? null;
 
       return {
         id: app.id,
@@ -225,6 +230,7 @@ export const getMyApplications = asyncHandler(
         interview_id: interview?.id ?? null,
         interview_status: interview?.status ?? null,
         interview_scheduled_at: interview?.scheduled_at ?? null,
+        interviews: interviews.map((i) => ({ id: i.id, status: i.status, scheduled_at: i.scheduled_at ?? null })),
         role: {
           id: rolesAssoc?.id ?? null,
           title: roleTitle,

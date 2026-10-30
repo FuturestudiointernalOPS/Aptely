@@ -8,6 +8,7 @@ import { useRequireInstitution } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
 import { getClientLocale, t, type Locale } from "@/lib/i18n";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RequireCompanyAccess } from "@/components/RequireCompanyAccess";
 import {
     CalendarRange, Search, Filter, ArrowUpRight, MapPin, Clock,
     User2, Briefcase, FileText, UserCircle, AlertCircle, ChevronRight, Video,
@@ -375,7 +376,7 @@ function AllInterviewsTab() {
 
 type Tab = "mine" | "all";
 
-export default function InterviewsPage() {
+function InterviewsPageContent() {
     useRequireInstitution();
 
     const locale = getClientLocale();
@@ -425,5 +426,14 @@ export default function InterviewsPage() {
             {(!hasAllTab || tab === "mine") && <MyInterviewsTab />}
             {hasAllTab && tab === "all" && <AllInterviewsTab />}
         </div>
+    );
+}
+
+// The guard lives here, not in a layout: the candidate booking page (interviews/book/[token]) is a child route.
+export default function InterviewsPage() {
+    return (
+        <RequireCompanyAccess page="interviews">
+            <InterviewsPageContent />
+        </RequireCompanyAccess>
     );
 }

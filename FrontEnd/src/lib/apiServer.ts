@@ -141,6 +141,8 @@ export async function getDashboardStatsServer(): Promise<DashboardStats> {
   const stats = await serverApiFetch<any>("/hr/dashboard/stats");
   return {
     totalRoles: stats?.totalRoles || 0,
+    activeRoles: stats?.activeRoles || 0,
+    activeRolesWithoutApplications: stats?.activeRolesWithoutApplications || 0,
     totalApplications: stats?.totalApplications || 0,
     pendingApplications: stats?.pendingApplications || 0,
     analyzingApplications: stats?.analyzingApplications || 0,
@@ -158,13 +160,15 @@ export async function getMeServer(): Promise<MeServerPayload | null> {
 export type MyPermissionsServer = {
   permissions: string[];
   roleSpecialization: string | null;
+  /** OWNER / ADMIN / ACTIVE / ... — the owner has no role_specialization, only this status. */
+  membershipStatus: string | null;
 };
 
 async function fetchPermissionsWithToken(
   token: string,
   workspaceId: string | null
 ): Promise<MyPermissionsServer> {
-  if (!API_URL) return { permissions: [], roleSpecialization: null };
+  if (!API_URL) return { permissions: [], roleSpecialization: null, membershipStatus: null };
   try {
     const response = await fetch(`${API_URL}/institution/me/permissions`, {
       headers: {
@@ -174,15 +178,16 @@ async function fetchPermissionsWithToken(
       },
       cache: "no-store",
     });
-    if (!response.ok) return { permissions: [], roleSpecialization: null };
+    if (!response.ok) return { permissions: [], roleSpecialization: null, membershipStatus: null };
     const wrapper = await response.json();
     const res = wrapper?.data ?? wrapper;
     return {
       permissions: Array.isArray(res?.permissions) ? res.permissions : [],
       roleSpecialization: res?.role_specialization ?? null,
+      membershipStatus: res?.membership_status ?? null,
     };
   } catch {
-    return { permissions: [], roleSpecialization: null };
+    return { permissions: [], roleSpecialization: null, membershipStatus: null };
   }
 }
 
@@ -196,7 +201,7 @@ const getCachedPermissions = unstable_cache(
 export async function getMyPermissionsServer(): Promise<MyPermissionsServer> {
   const cookieStore = await cookies();
   const token = cookieStore.get("hr_access_token")?.value;
-  if (!token) return { permissions: [], roleSpecialization: null };
+  if (!token) return { permissions: [], roleSpecialization: null, membershipStatus: null };
   return getCachedPermissions(token, cookieStore.get(WORKSPACE_COOKIE)?.value ?? null);
 }
 
@@ -240,9 +245,21 @@ export async function getRolesServer(): Promise<Role[]> {
   return roles.map(r => normalizeRoleFromApi(r, appOrigin));
 }
 
-export async function getInstitutionInterviewsServer(limit = 5): Promise<InstitutionInterviewServerItem[]> {
+export async function getInstitutionInterviewsServer(
+  limit = 5,
+  { upcomingOnly = false }: { upcomingOnly?: boolean } = {},
+): Promise<InstitutionInterviewServerItem[]> {
   const payload = await serverApiFetch<any>("/interviews/institution/list");
-  const rows = Array.isArray(payload?.interviews) ? payload.interviews : [];
+  const allRows = Array.isArray(payload?.interviews) ? payload.interviews : [];
+  const now = Date.now();
+  // "Upcoming" = dated in the future and neither completed nor cancelled.
+  const rows = upcomingOnly
+    ? allRows.filter((row: any) => {
+        const status = String(row?.status ?? "").toUpperCase();
+        const at = safeDateString(row?.scheduledAt ?? row?.scheduled_at);
+        return status !== "COMPLETED" && status !== "CANCELLED" && !!at && new Date(at).getTime() >= now;
+      })
+    : allRows;
 
   return rows
     .slice()
@@ -279,4 +296,28 @@ export async function deleteRoleServer(roleId: string) {
   return serverApiFetch(`/roles/${roleId}`, {
     method: "DELETE",
   });
+}
+
+/** Upcoming interviews the caller is a participant of (recruiter / hiring-manager view). */
+export async function getMyUpcomingInterviewsServer(limit = 3): Promise<InstitutionInterviewServerItem[]> {
+  const rows = await serverApiFetch<any[]>("/interviews/assigned-to-me");
+  if (!Array.isArray(rows)) return [];
+  const now = Date.now();
+  return rows
+    .filter((row) => {
+      const status = String(row?.status ?? "").toUpperCase();
+      const at = safeDateString(row?.scheduledAt);
+      return status !== "COMPLETED" && status !== "CANCELLED" && !!at && new Date(at).getTime() >= now;
+    })
+    .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+    .slice(0, Math.max(1, limit))
+    .map((row) => ({
+      id: asNonEmptyString(row?.id) ?? "",
+      applicationId: asNonEmptyString(row?.applicationId) ?? "",
+      candidateName: asNonEmptyString(row?.candidateName) ?? "Candidate",
+      roleTitle: asNonEmptyString(row?.roleTitle) ?? "Role",
+      status: asNonEmptyString(row?.status) ?? "DRAFT",
+      scheduledAt: asNonEmptyString(row?.scheduledAt),
+      meetingLocation: null,
+    }));
 }

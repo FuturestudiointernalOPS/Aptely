@@ -12,6 +12,8 @@ export type MembershipStatus = "OWNER" | "ADMIN" | "ACTIVE" | "PENDING" | "SUSPE
 
 export interface DashboardStats {
   totalRoles: number;
+  activeRoles: number;
+  activeRolesWithoutApplications: number;
   totalApplications: number;
   pendingApplications: number;
   analyzingApplications: number;

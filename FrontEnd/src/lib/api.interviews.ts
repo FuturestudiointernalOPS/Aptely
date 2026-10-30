@@ -65,7 +65,8 @@ export async function createInterview(payload: {
     body: JSON.stringify(payload),
   });
 
-  if (!res) return null;
+  // A 403 comes back as a truthy { isPermissionError } object: not a success.
+  if (!isApiSuccess(res)) return null;
 
   return {
     id: res.id,
@@ -105,7 +106,7 @@ export async function assignInterviewers(
     body: JSON.stringify({ interviewerProfiles, secondaryCollectiveWeight }),
   });
 
-  if (!res) return null;
+  if (!isApiSuccess(res)) return null;
 
   return {
     id: res.id ?? interviewId,
@@ -173,7 +174,7 @@ export async function scheduleInterview(
     body: JSON.stringify(payload),
   });
 
-  if (!res) return null;
+  if (!isApiSuccess(res)) return null;
 
   return {
     id: res.id ?? interviewId,
@@ -436,7 +437,9 @@ export async function updateApplicationStatus(applicationId: string, status: str
       method: "PATCH",
       body: JSON.stringify({ status })
     });
-    return res !== null;
+    // A 401/403 comes back as a truthy error object: only a real success counts,
+    // otherwise the role page keeps an optimistic status that was never saved.
+    return isApiSuccess(res);
   } catch (err) {
     console.error("Failed to update application status", err);
     return false;

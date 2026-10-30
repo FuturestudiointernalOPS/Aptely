@@ -2,10 +2,10 @@ import {
   getMeServer,
   getMyPermissionsServer,
   getDashboardStatsServer,
-  getRecentActivityServer,
   getRecentRolesServer,
   getRecentApplicationsServer,
   getInstitutionInterviewsServer,
+  getMyUpcomingInterviewsServer,
 } from "@/lib/apiServer";
 import {
   Briefcase,
@@ -42,16 +42,6 @@ function relativeTime(iso: string, locale: Locale): string {
   const d = Math.floor(h / 24);
   const key = d > 1 ? "dashboard.time.daysAgo" : "dashboard.time.dayAgo";
   return t(locale, key, `{{d}} day${d > 1 ? "s" : ""} ago`, { d });
-}
-
-function clampPercent(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, value));
-}
-
-function toPercent(numerator: number, denominator: number): number {
-  if (denominator <= 0) return 0;
-  return clampPercent(Math.round((numerator / denominator) * 100));
 }
 
 function formatDateTime(iso: string | null, locale: Locale): string {
@@ -106,14 +96,40 @@ export default async function DashboardPage() {
     );
   }
 
-  const [stats, roles, activities, recentApplications, interviews, perms] = await Promise.all([
+  const [stats, roles, recentApplications, perms] = await Promise.all([
     getDashboardStatsServer(),
     getRecentRolesServer(5),
-    getRecentActivityServer(),
     getRecentApplicationsServer(5),
-    getInstitutionInterviewsServer(3),
     getMyPermissionsServer(),
   ]);
+
+  // The owner has no role_specialization (only the OWNER membership status).
+  const roleKey = perms.roleSpecialization ?? perms.membershipStatus ?? "";
+  // Recruiters and hiring managers only see the interviews they take part in;
+  // everyone else with interviews.manage sees the company-wide upcoming ones.
+  const interviewsAssignedOnly = roleKey === "RECRUITER" || roleKey === "HIRING_MANAGER";
+  const interviews = interviewsAssignedOnly
+    ? await getMyUpcomingInterviewsServer(3)
+    : await getInstitutionInterviewsServer(3, { upcomingOnly: true });
+
+  // One dashboard profile per level of responsibility.
+  const profileKey =
+    ["OWNER", "ADMIN", "HR_LEAD", "STANDARD_HR", "HIRING_MANAGER", "RECRUITER"].includes(roleKey)
+      ? roleKey
+      : ["MEMBER", "ACTIVE"].includes(roleKey)
+      ? "MEMBER"
+      : "DEFAULT";
+  const PROFILE_DEFAULTS: Record<string, { title: string; subtitle: string }> = {
+    OWNER: { title: "Company overview", subtitle: "Hiring and team at a glance" },
+    ADMIN: { title: "Company administration", subtitle: "Team and hiring operations" },
+    HR_LEAD: { title: "HR Command Center", subtitle: "Real-time role and talent management" },
+    STANDARD_HR: { title: "HR workspace", subtitle: "Applications, interviews and offers" },
+    HIRING_MANAGER: { title: "Hiring manager workspace", subtitle: "Your candidates and interviews" },
+    RECRUITER: { title: "Recruiter workspace", subtitle: "Applications to screen and your interviews" },
+    MEMBER: { title: "My workspace", subtitle: "Your company space" },
+    DEFAULT: { title: "Dashboard", subtitle: "Your company space" },
+  };
+  const profile = PROFILE_DEFAULTS[profileKey];
 
   // Permission gating (OWNER's set already contains every permission).
   const can = (p: string) => perms.permissions.includes(p);
@@ -121,39 +137,12 @@ export default async function DashboardPage() {
   const canInterviews = can("interviews.manage");
   const canQueue = can("applications.decide") || can("offers.manage");
   const canRolesManage = can("roles.create") || can("roles.update");
-  const canAnalytics = can("analytics.view");
   const canMembers = can("members.view");
   const canSettings = can("settings.edit");
   // Show the recruitment-focused dashboard body only if the caller has any of these.
-  const hasAnyDashboard = canApps || canInterviews || canQueue || canAnalytics || canMembers;
+  const hasAnyDashboard = canApps || canInterviews || canQueue || canMembers;
 
-  const applicationVolume = Math.max(stats.totalApplications, 1);
-  const validatedRate = toPercent(stats.validatedApplications, applicationVolume);
-  const pendingRate = toPercent(stats.pendingApplications, applicationVolume);
-
-  const unreviewedApplications = Math.max(
-    stats.totalApplications - stats.validatedApplications - stats.rejectedApplications,
-    0
-  );
-  const activeRolesNeedingAttention = roles.filter((role) => role.applicationsCount === 0).length;
-
-  const focusLabel =
-    stats.totalApplications === 0
-      ? t(locale, "dashboard.focus.empty", "Start your first pipeline")
-      : validatedRate >= 35
-      ? t(locale, "dashboard.focus.momentum", "Strong momentum")
-      : pendingRate >= 45
-      ? t(locale, "dashboard.focus.backlog", "Review backlog growing")
-      : t(locale, "dashboard.focus.progress", "Pipeline in progress");
-
-  const focusDescription =
-    stats.totalApplications === 0
-      ? t(locale, "dashboard.focus.emptyDesc", "Create a job post and share it to attract your first qualified applications.")
-      : pendingRate >= 45
-      ? t(locale, "dashboard.focus.backlogDesc", "Your queue has many pending applications. Prioritize triage to keep hiring speed high.")
-      : validatedRate >= 35
-      ? t(locale, "dashboard.focus.momentumDesc", "A healthy share of candidates is getting validated. Keep the pace and finalize interviews.")
-      : t(locale, "dashboard.focus.progressDesc", "Your funnel is active. Push high-potential candidates toward interview decisions.");
+  const activeRolesNeedingAttention = stats.activeRolesWithoutApplications;
 
   const fallbackApplicationActivities = recentApplications.map((application, index) => ({
     activityId: `app-${application.applicationId}-${index}`,
@@ -186,13 +175,37 @@ export default async function DashboardPage() {
       {/* ── Page header ── */}
       <div className="animate-fade-in-up">
         <PageHeader
-          title={t(locale, "dashboard.title", "HR Command Center")}
-          subtitle={t(locale, "dashboard.subtitle", "Real-time role and talent management")}
+          title={t(locale, `dashboard.profile.${profileKey}.title`, profile.title)}
+          subtitle={t(locale, `dashboard.profile.${profileKey}.subtitle`, profile.subtitle)}
+          actions={
+            (canInterviews || canRolesManage) && (
+              <>
+                {canInterviews && (
+                  <Link
+                    href={ROUTES.company.recruitment.interviews}
+                    className="inline-flex items-center gap-1.5 text-sm text-[var(--accent)] font-semibold hover:opacity-80 transition-opacity"
+                  >
+                    {t(locale, "dashboard.stats.interviews", "Open interview tracking")}
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+                {canRolesManage && (
+                  <Link
+                    href={ROUTES.company.recruitment.rolesCreate}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity flex-shrink-0 whitespace-nowrap"
+                  >
+                    <Briefcase className="w-3.5 h-3.5" />
+                    {t(locale, "dashboard.createRole", "Create job post")}
+                  </Link>
+                )}
+              </>
+            )
+          }
         />
       </div>
 
       {/* ── Stat strip — single horizontal row, no cards ── */}
-      {(canApps || canAnalytics || canMembers) && (
+      {canApps && (
       <div
         className="grid grid-cols-2 gap-px bg-[var(--border)] lg:flex lg:items-center lg:gap-0 lg:bg-[var(--bg-surface)] lg:divide-x lg:divide-[var(--border)] border border-[var(--border)] rounded-xl overflow-hidden lg:overflow-x-auto animate-fade-in-up"
         style={{ animationDelay: "30ms" }}
@@ -245,79 +258,13 @@ export default async function DashboardPage() {
           className="flex flex-col gap-0.5 bg-[var(--bg-surface)] px-3 sm:px-5 py-2.5 sm:py-3.5 hover:bg-[var(--bg-raised)] transition-colors duration-150 flex-1 min-w-[80px]"
         >
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            {t(locale, "dashboard.cards.activeRoles", "Active Roles")}
+            {t(locale, "dashboard.cards.activeRoles", "Open Roles")}
           </span>
           <span className="text-lg sm:text-xl font-bold tabular-nums text-[var(--text-primary)]">
-            {stats.totalRoles}
+            {stats.activeRoles}
           </span>
         </Link>
         )}
-
-        {canAnalytics && (
-        <div className="flex flex-col gap-0.5 bg-[var(--bg-surface)] px-3 sm:px-5 py-2.5 sm:py-3.5 flex-1 min-w-[80px]">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            {t(locale, "dashboard.health.title", "Conversion")}
-          </span>
-          <span className="text-lg sm:text-xl font-bold tabular-nums text-[var(--accent)]">
-            {validatedRate}%
-          </span>
-        </div>
-        )}
-
-        {canMembers && (
-        <div className="flex flex-col gap-0.5 bg-[var(--bg-surface)] px-3 sm:px-5 py-2.5 sm:py-3.5 flex-1 min-w-[80px]">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            {t(locale, "dashboard.cards.hrMembers", "HR Members")}
-          </span>
-          <span className="text-lg sm:text-xl font-bold tabular-nums text-[var(--text-primary)]">
-            {stats.activeHRMembers}
-          </span>
-        </div>
-        )}
-      </div>
-      )}
-
-      {/* ── Focus banner ── */}
-      {canApps && (
-      <div
-        className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-4 sm:px-6 py-4 sm:py-5 animate-fade-in-up"
-        style={{ animationDelay: "60ms" }}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)] text-[10px] font-bold uppercase tracking-wide mb-3">
-              {t(locale, "dashboard.focus.title", "Recruitment Focus")}
-            </div>
-            <h2 className="text-base font-semibold text-[var(--text-primary)]">{focusLabel}</h2>
-            <p className="text-[var(--text-secondary)] text-sm mt-1 max-w-2xl">{focusDescription}</p>
-          </div>
-          <div className="flex-shrink-0 text-right hidden sm:block">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-1">
-              {t(locale, "dashboard.health.unreviewed", "Unreviewed")}
-            </p>
-            <p className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">{unreviewedApplications}</p>
-          </div>
-        </div>
-        <div className="mt-4 flex items-center gap-3">
-          {canInterviews && (
-          <Link
-            href={ROUTES.company.recruitment.interviews}
-            className="inline-flex items-center gap-1.5 text-sm text-[var(--accent)] font-semibold hover:opacity-80 transition-opacity"
-          >
-            {t(locale, "dashboard.stats.interviews", "Open interview tracking")}
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </Link>
-          )}
-          {canRolesManage && (
-          <Link
-            href={ROUTES.company.recruitment.rolesCreate}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity flex-shrink-0 whitespace-nowrap"
-          >
-            <Briefcase className="w-3.5 h-3.5" />
-            {t(locale, "dashboard.createRole", "Create job post")}
-          </Link>
-          )}
-        </div>
       </div>
       )}
 
@@ -329,7 +276,9 @@ export default async function DashboardPage() {
       >
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-            {t(locale, "dashboard.upcomingInterviews", "Upcoming interviews")}
+            {interviewsAssignedOnly
+              ? t(locale, "dashboard.myUpcomingInterviews", "My upcoming interviews")
+              : t(locale, "dashboard.upcomingInterviews", "Upcoming interviews")}
           </h2>
           <Link href={ROUTES.company.recruitment.interviews} className="text-[var(--accent)] text-xs font-semibold hover:opacity-80 transition-opacity">
             {t(locale, "dashboard.openInterviews", "Open interviews")}
@@ -490,13 +439,6 @@ export default async function DashboardPage() {
               ? t(locale, "dashboard.teamActive_one", "1 Team Member Active")
               : t(locale, "dashboard.teamActive", "{{count}} Team Members Active", { count: stats.activeHRMembers })}
           </p>
-          <p className="text-xs text-[var(--text-muted)]">
-            {t(locale, "dashboard.teamDesc", "Managing {{roles}} roles and {{apps}} total applications.", {
-              count: stats.totalRoles,
-              roles: stats.totalRoles,
-              apps: stats.totalApplications,
-            })}
-          </p>
         </div>
         <Link
           href={ROUTES.company.settings.hr}
@@ -513,12 +455,6 @@ export default async function DashboardPage() {
         className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm text-[var(--text-muted)] animate-fade-in-up"
         style={{ animationDelay: "500ms" }}
       >
-        <ScanEye className="w-4 h-4 flex-shrink-0" />
-        <span>
-          {t(locale, "dashboard.health.unreviewed", "Unreviewed queue")}:{" "}
-          <strong className="text-[var(--text-primary)] font-semibold">{unreviewedApplications}</strong>
-        </span>
-        <span className="text-[var(--border)]">·</span>
         <Users className="w-4 h-4 flex-shrink-0" />
         <span>
           {t(locale, "dashboard.health.noCandidate", "Roles without candidates")}:{" "}

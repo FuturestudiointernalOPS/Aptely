@@ -12,13 +12,20 @@ import {
 
 const apiFetchMock = vi.fn();
 
-vi.mock("./apiHelper", () => ({
+vi.mock("./apiHelper", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./apiHelper")>()),
   apiFetch: (...args: unknown[]) => apiFetchMock(...args),
 }));
 
 describe("api interviews helpers", () => {
   beforeEach(() => {
     apiFetchMock.mockReset();
+  });
+
+  it("does not report a refused (403) createInterview as a success", async () => {
+    apiFetchMock.mockResolvedValue({ status: 403, error: "forbidden", isPermissionError: true });
+    const result = await createInterview({ applicationId: "app_1", name: "x", interviewType: "CUSTOM" });
+    expect(result).toBeNull();
   });
 
   it("maps createInterview payload/response", async () => {

@@ -6,6 +6,7 @@ import { asyncHandler } from "@/utils/helpers";
 import { uploadFile, STORAGE_BUCKETS, buildStoragePath } from "@/services/storage.service";
 import { createNotification, NOTIF_LINKS, NOTIF_TITLES } from "@/modules/notifications/notifications.service";
 import type { AuthenticatedRequest } from "@/middleware/auth.middleware";
+import { deriveRoleFieldsFromFullForm } from "@/modules/roles/role-form.mapper";
 
 /**
  * Get public role details by share link slug.
@@ -289,13 +290,21 @@ export const applyPublic = asyncHandler(async (req: AuthenticatedRequest, res: R
 
   // 6.6 Notify institution HR members about new application
   if (role.institution_id) {
-    const roleTitle = (role as any).title || "New role";
-    // Find active institution members with HR roles to notify
+    // roles has no title column: the title lives in role_dna.full_form_json.
+    const { data: roleDnaRow } = await supabaseAdmin
+      .from("role_dna")
+      .select("full_form_json")
+      .eq("role_id", role.id)
+      .maybeSingle();
+    const roleTitle = deriveRoleFieldsFromFullForm(
+      (roleDnaRow?.full_form_json ?? {}) as Record<string, unknown>
+    ).title;
+    // Notify every active member of the enterprise, admins included.
     const { data: members } = await supabaseAdmin
       .from("institution_members")
       .select("user_id")
       .eq("institution_id", role.institution_id)
-      .in("status", ["OWNER", "ACTIVE"]);
+      .in("status", ["OWNER", "ADMIN", "ACTIVE"]);
 
     if (members && members.length > 0) {
       for (const member of members) {

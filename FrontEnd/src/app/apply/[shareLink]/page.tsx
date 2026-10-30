@@ -376,7 +376,11 @@ export default function PublicApplyPage() {
     const roleDescription = (role?.description as string) || (role?.full_form_json as any)?.mission90Day || "";
     const roleDepartment = (role?.department as string) || "";
     const roleSuccess6 = (role?.full_form_json as any)?.success6Month || "";
-    const roleSkills = (role?.full_form_json as any)?.skills || [];
+    // The role form saves its empty default rows too: keep only named skills, otherwise
+    // the "required skills" section renders blank pills.
+    const roleSkills = (((role?.full_form_json as any)?.skills || []) as any[]).filter((s: any) =>
+      String(typeof s === "string" ? s : s?.name ?? "").trim().length > 0,
+    );
     const roleSalary = (role?.full_form_json as any)?.salaryMin && (role?.full_form_json as any)?.salaryMax 
       ? `${(role?.full_form_json as any).salaryMin} - ${(role?.full_form_json as any).salaryMax} ${(role?.full_form_json as any).salaryCurrency || 'EUR'}` 
       : "";
@@ -522,23 +526,23 @@ export default function PublicApplyPage() {
               </div>
             )}
 
-            {/* Warning: encourage complete info for matching */}
-            <div className="flex items-start gap-3 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-dim)] p-4">
-              <AlertCircle className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-[var(--text-primary)] space-y-2">
-                <p>
-                  {tr(
-                    "apply.public.completenessWarning",
-                    "Donnez un maximum d'informations sur vous : plus votre profil est complet, plus notre analyse de correspondance sera précise. Ne négligez aucune section."
-                  )}
-                </p>
-                <p className="text-[var(--text-muted)] text-xs">
-                  {tr(
-                    "apply.public.profileSkipHint",
-                    "Si votre profil Aptely est déjà complet, vos informations seront pré-remplies et vous pourrez passer plus vite. Les informations déjà présentes dans votre CV vous permettent également de sauter certains champs."
-                  )}
-                </p>
-              </div>
+            {/* Before applying: what happens to the application */}
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 sm:p-5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                {tr("apply.public.beforeApplying.title", "Avant de postuler")}
+              </p>
+              <ul className="mt-3 space-y-2.5 text-sm text-[var(--text-secondary)]">
+                {[
+                  tr("apply.public.beforeApplying.review", "Votre candidature est examinée par l'équipe de recrutement."),
+                  tr("apply.public.beforeApplying.accuracy", "Des informations précises et complètes facilitent l'étude de votre dossier."),
+                  tr("apply.public.beforeApplying.prefill", "Si vous disposez d'un profil Aptely ou d'un CV, le formulaire est pré-rempli."),
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-2.5">
+                    <CheckCircle className="w-4 h-4 text-[var(--accent)] flex-shrink-0 mt-0.5" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             {/* Apply Button */}
@@ -813,7 +817,7 @@ export default function PublicApplyPage() {
                 <h2 className="text-2xl font-bold text-gray-900">{tr("apply.public.step6.title", "Values & alignment")}</h2>
                 <span className="text-xs font-medium text-[var(--accent)] bg-[var(--accent-dim)] px-2 py-0.5 rounded-full">{tr("apply.public.optional", "Optional")}</span>
               </div>
-              <p className="text-sm text-gray-400">{tr("apply.public.step6.optionalHint", "Ces informations améliorent le matching IA mais sont facultatives. Si elles figurent déjà dans votre CV, vous pouvez passer.")}</p>
+              <p className="text-sm text-gray-400">{tr("apply.public.step6.optionalHint", "Ces informations sont facultatives. Si elles figurent déjà dans votre CV, vous pouvez passer.")}</p>
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-2">{tr("apply.public.step6.flexibilityVsStructure", "Flexibility vs Structure")}: {style.chaosVsStructure}</label>
                 <input type="range" min="0" max="100" value={style.chaosVsStructure} onChange={e => setStyle({...style, chaosVsStructure: parseInt(e.target.value)})} className="w-full accent-orange-500" />

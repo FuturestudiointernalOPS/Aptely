@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getServerLocale, t } from "@/lib/i18n";
 import React from "react";
+import { RequireCompanyAccess } from "@/components/RequireCompanyAccess";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getServerLocale();
@@ -8,5 +9,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <RequireCompanyAccess page="team">{children}</RequireCompanyAccess>;
 }

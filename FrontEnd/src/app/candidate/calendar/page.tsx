@@ -15,6 +15,7 @@ interface ApplicationEvent {
   interview_scheduled_at?: string | null;
   interview_id?: string | null;
   interview_status?: string | null;
+  interviews?: { id?: string; status: string | null; scheduled_at: string | null }[];
   role: {
     id: string | null;
     title: string;
@@ -95,16 +96,22 @@ export default function CandidateCalendarPage() {
       try {
         const res = await apiFetch(individualsMyApplicationsApi, "HR", { method: "GET", cache: "no-store" });
         const apps: ApplicationEvent[] = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-        const calEvents: CalendarEvent[] = apps
-          .filter((a) => a.interview_scheduled_at)
-          .map((a) => ({
-            date: new Date(a.interview_scheduled_at!),
-            appId: a.id,
-            roleTitle: a.role.title,
-            institutionName: a.role.institution_name,
-            institutionLogo: a.role.institution_logo,
-            interviewStatus: a.interview_status ?? null,
-          }));
+        // One event per scheduled interview (an application can have several).
+        const calEvents: CalendarEvent[] = apps.flatMap((a) => {
+          const interviews = a.interviews ?? (a.interview_scheduled_at
+            ? [{ status: a.interview_status ?? null, scheduled_at: a.interview_scheduled_at }]
+            : []);
+          return interviews
+            .filter((i) => i.scheduled_at)
+            .map((i) => ({
+              date: new Date(i.scheduled_at!),
+              appId: a.id,
+              roleTitle: a.role.title,
+              institutionName: a.role.institution_name,
+              institutionLogo: a.role.institution_logo,
+              interviewStatus: i.status ?? null,
+            }));
+        });
         calEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
         setEvents(calEvents);
       } finally {
@@ -271,7 +278,7 @@ export default function CandidateCalendarPage() {
                 </div>
                 <div className="divide-y divide-[var(--border)]">
                   {selectedDayEvents.map((ev) => (
-                    <EventCard key={ev.appId} ev={ev} locale={locale} />
+                    <EventCard key={`${ev.appId}-${ev.date.getTime()}`} ev={ev} locale={locale} />
                   ))}
                 </div>
               </div>
@@ -302,7 +309,7 @@ export default function CandidateCalendarPage() {
               ) : (
                 <div className="divide-y divide-[var(--border)]">
                   {upcomingEvents.map((ev) => (
-                    <EventCard key={ev.appId} ev={ev} locale={locale} />
+                    <EventCard key={`${ev.appId}-${ev.date.getTime()}`} ev={ev} locale={locale} />
                   ))}
                 </div>
               )}
