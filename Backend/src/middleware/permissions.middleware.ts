@@ -2,7 +2,10 @@ import { Response, NextFunction } from "express";
 import { supabaseAdmin } from "@/config/supabase";
 import { AppError } from "@/middleware/error.middleware";
 import { asyncHandler } from "@/utils/helpers";
-import type { AuthenticatedRequest } from "@/middleware/auth.middleware";
+import {
+  isPersonalWorkspaceRequest,
+  type AuthenticatedRequest,
+} from "@/middleware/auth.middleware";
 
 export type InstitutionPermission =
   | "roles.create"
@@ -126,16 +129,22 @@ export const DEFAULT_PERMISSIONS: Record<string, InstitutionPermission[]> = {
     "goals.view", "goals.manage",
     "retention.view", "learning.manage", "compensation.manage",
   ],
+  // HM: score / decide / goals — can open fiches (liste via applications.view) but does not create roles or own offers.
   HIRING_MANAGER: [
     "applications.view", "applications.decide",
     "communications.send",
     "interviews.manage",
     "goals.view",
   ],
+  // Recruiter: opère le pipeline — fiches, offres, décisions, onboarding templates.
   RECRUITER: [
     "applications.view",
+    "applications.decide",
     "communications.send",
     "interviews.manage",
+    "roles.create", "roles.update",
+    "offers.manage",
+    "onboarding.manage",
   ],
   STANDARD_HR: [
     "applications.view", "applications.decide",
@@ -210,6 +219,35 @@ export function requirePermission(permission: InstitutionPermission) {
     // permission on that same institution the controllers will read and write —
     // never on the raw header, or a permission held in one workspace would unlock
     // data in another.
+    const institutionId =
+      req.workspace?.institutionId
+      ?? user.activeInstitutionId
+      ?? user.institutionId
+      ?? null;
+
+    if (!institutionId) throw new AppError(403, "You are not linked to any institution");
+
+    const allowed = await checkPermission(user.id, institutionId, permission);
+    if (!allowed) {
+      throw new AppError(403, `Permission denied: ${permission}`);
+    }
+    next();
+  });
+}
+
+/**
+ * HR permission gate, OR pass-through for personal workspace.
+ * Controllers must still enforce ownership (e.g. candidate_id === user.id).
+ * Used so talents can call GET /applications/:id without applications.view.
+ */
+export function requirePermissionOrPersonalWorkspace(permission: InstitutionPermission) {
+  return asyncHandler(async (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+    if (isPersonalWorkspaceRequest(req)) {
+      next();
+      return;
+    }
+
+    const user = req.user!;
     const institutionId =
       req.workspace?.institutionId
       ?? user.activeInstitutionId
