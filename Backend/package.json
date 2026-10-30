@@ -4,7 +4,7 @@
   "description": "Aptely — AI-powered recruitment platform API",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "nodemon",
+    "dev": "NODE_OPTIONS=--max-old-space-size=1024 nodemon",
     "build": "node scripts/prebuild.js && tsc --project tsconfig.json && tsc-alias -p tsconfig.json && cp src/openapi.yaml dist/openapi.yaml",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
@@ -14,7 +14,8 @@
     "test": "cross-env jest --forceExit",
     "test:watch": "cross-env jest --watch",
     "test:integration": "cross-env RUN_INTEGRATION_TESTS=true jest --forceExit",
-    "dead-code": "knip"
+    "dead-code": "knip",
+    "ensure:demo-superadmin": "node scripts/ensure-demo-superadmin.cjs"
   },
   "keywords": [
     "aptely",

@@ -122,28 +122,11 @@ export const getApplicationById = asyncHandler(
     }
 
     if (isPersonalWorkspaceRequest(req)) {
-      // Personal workspace: candidate can access their own application.
+      // Talent portal: only the candidate who owns the application.
+      // Do NOT fall back to institution membership here — that would let MEMBER
+      // (no applications.view) read apps by sending X-Workspace-Id: personal.
       if (data?.candidate_id !== user.id) {
-        // Back-compat: if the caller is actually an institution member,
-        // allow access based on role.institution_id.
-        const role = data.roles as unknown as any;
-        const roleInstitutionId = role?.institution_id as string | null | undefined;
-
-        if (roleInstitutionId) {
-          const { data: membership } = await supabaseAdmin
-            .from("institution_members")
-            .select("institution_id, status")
-            .eq("user_id", user.id)
-            .eq("institution_id", roleInstitutionId)
-            .in("status", ["OWNER", "ADMIN", "ACTIVE"])
-            .maybeSingle();
-
-          if (!membership) {
-            throw new AppError(403, "Access denied");
-          }
-        } else {
-          throw new AppError(403, "Access denied");
-        }
+        throw new AppError(403, "Access denied");
       }
     } else {
       const role = data.roles as unknown as any;
@@ -195,9 +178,14 @@ export const getApplicationById = asyncHandler(
     const identity = (snapshot?.talent_identity as Record<string, unknown> | undefined) ?? {};
     const links = (identity.links as Record<string, unknown> | undefined) ?? {};
 
+    const isOwnApplicationAsTalent =
+      isPersonalWorkspaceRequest(req) && data.candidate_id === user.id;
+
     const responsePayload = {
       data: {
         ...data,
+        // Internal HR notes must never leak to the candidate portal.
+        notes: isOwnApplicationAsTalent ? undefined : data.notes,
         submittedAt: data.created_at ?? null,
         guest_name: typeof identity.name === "string" ? identity.name : null,
         guest_email: typeof identity.email === "string" ? identity.email : null,
@@ -655,13 +643,15 @@ export const getEmailPreview = asyncHandler(
 
     if (error || !data) throw new AppError(404, "Application not found");
 
+    // No templates yet (finalize-selection not run) → empty 200, not 404 (avoids Next.js overlay noise).
     const templates = data.email_templates_json ?? null;
-
-    if (!templates) {
-      throw new AppError(404, "No email templates found. Run finalize-selection first.");
-    }
-
-    res.status(200).json({ templates });
+    res.status(200).json({
+      templates,
+      ready: templates != null,
+      message: templates
+        ? undefined
+        : "No email templates yet. Run finalize-selection first.",
+    });
   }
 );
 
