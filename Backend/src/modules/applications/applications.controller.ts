@@ -768,6 +768,17 @@ export const relaunchApplicationMatching = asyncHandler(
     const app = await assertHROwnership(id, institutionId, supabaseAdmin);
     const roleId = (app as { role_id: string }).role_id;
 
+    // A relaunch puts the application back in ANALYSING and ends in FINISHED: it must not
+    // silently overwrite a decision a person already took (VALIDATED / REJECTED).
+    const { data: current } = await supabaseAdmin
+      .from("applications")
+      .select("status")
+      .eq("id", id)
+      .maybeSingle();
+    if (current?.status === "VALIDATED" || current?.status === "REJECTED") {
+      throw new AppError(409, "A decision was already taken on this application; it cannot be re-analysed");
+    }
+
     const { error: updateError } = await supabaseAdmin
       .from("applications")
       .update({ status: "ANALYSING" })
