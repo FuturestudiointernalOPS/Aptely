@@ -149,6 +149,7 @@ export async function getDashboardStatsServer(): Promise<DashboardStats> {
     validatedApplications: stats?.validatedApplications || 0,
     rejectedApplications: stats?.rejectedApplications || 0,
     activeHRMembers: stats?.activeHRMembers || 0,
+    pendingAccessRequests: stats?.pendingAccessRequests || 0,
   };
 }
 
@@ -298,12 +299,23 @@ export async function deleteRoleServer(roleId: string) {
   });
 }
 
-/** Upcoming interviews the caller is a participant of (recruiter / hiring-manager view). */
-export async function getMyUpcomingInterviewsServer(limit = 3): Promise<InstitutionInterviewServerItem[]> {
+/**
+ * Interviews the caller takes part in (recruiter / hiring-manager view): the upcoming ones,
+ * and how many finished interviews still wait for the caller's evaluation.
+ */
+export async function getMyInterviewsServer(
+  limit = 3,
+): Promise<{ upcoming: InstitutionInterviewServerItem[]; evaluationsDue: number }> {
   const rows = await serverApiFetch<any[]>("/interviews/assigned-to-me");
-  if (!Array.isArray(rows)) return [];
+  if (!Array.isArray(rows)) return { upcoming: [], evaluationsDue: 0 };
   const now = Date.now();
-  return rows
+
+  const evaluationsDue = rows.filter((row) => {
+    const scorecard = String(row?.myScorecardStatus ?? "NONE").toUpperCase();
+    return String(row?.status ?? "").toUpperCase() === "COMPLETED" && (scorecard === "NONE" || scorecard === "DRAFT");
+  }).length;
+
+  const upcoming = rows
     .filter((row) => {
       const status = String(row?.status ?? "").toUpperCase();
       const at = safeDateString(row?.scheduledAt);
@@ -320,4 +332,6 @@ export async function getMyUpcomingInterviewsServer(limit = 3): Promise<Institut
       scheduledAt: asNonEmptyString(row?.scheduledAt),
       meetingLocation: null,
     }));
+
+  return { upcoming, evaluationsDue };
 }

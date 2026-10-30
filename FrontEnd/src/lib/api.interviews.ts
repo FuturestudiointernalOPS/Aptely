@@ -326,7 +326,7 @@ export async function submitInterviewerScore(
     body: JSON.stringify(payload),
   });
 
-  if (!res) return null;
+  if (!isApiSuccess(res)) return null;
 
   return {
     id: res.id,
@@ -409,7 +409,7 @@ export async function confirmBooking(
     body: JSON.stringify(payload),
   });
 
-  if (!res) {
+  if (!isApiSuccess(res)) {
     return {
       success: false,
       reason: "NO_AVAILABLE_SLOT",
@@ -667,6 +667,8 @@ export async function createInterviewScorecard(interviewId: string): Promise<Int
     method: "POST",
     body: JSON.stringify({}),
   });
+  // A refused call (403) comes back as a truthy object: do not hand back the existing card as if created.
+  if (res && !isApiSuccess(res)) return null;
   const list = await getInterviewScorecards(interviewId);
   if (!res) {
     // 409 already exists — return the existing scorecard for this reviewer
@@ -688,7 +690,7 @@ export async function updateInterviewScorecard(
     method: "PATCH",
     body: JSON.stringify(payload),
   });
-  if (!res) return null;
+  if (!isApiSuccess(res)) return null;
 
   const list = await getInterviewScorecards(interviewId);
   return list?.scorecards.find((card) => card.id === scorecardId) ?? null;
@@ -702,7 +704,7 @@ export async function submitInterviewScorecard(
     method: "POST",
     body: JSON.stringify({}),
   });
-  if (!res) return null;
+  if (!isApiSuccess(res)) return null;
 
   const list = await getInterviewScorecards(interviewId);
   return list?.scorecards.find((card) => card.id === scorecardId) ?? null;
@@ -809,7 +811,7 @@ export async function scheduleInterview24hReminder(
     body: JSON.stringify(payload),
   });
 
-  return Boolean(res);
+  return isApiSuccess(res);
 }
 
 export async function notifyInterviewerQuestionPacks(
@@ -821,7 +823,7 @@ export async function notifyInterviewerQuestionPacks(
     body: JSON.stringify({ sendEmail: payload?.sendEmail ?? true }),
   });
 
-  return Boolean(res);
+  return isApiSuccess(res);
 }
 
 // ─── T6: AI Summary ──────────────────────────────────────────────────────────
@@ -842,7 +844,7 @@ export async function generateInterviewSummary(interviewId: string): Promise<Int
     method: "POST",
     body: JSON.stringify({}),
   });
-  if (!res) return null;
+  if (!isApiSuccess(res)) return null;
   const data = res.data ?? res;
   return {
     id: data.id,
@@ -960,7 +962,7 @@ export async function dispatchInterviewDecision(payload: {
     method: "POST",
     body: JSON.stringify({ ...payload, sendEmail: payload.sendEmail ?? true }),
   });
-  if (!res) return { success: false };
+  if (!isApiSuccess(res)) return { success: false };
   return {
     success: true,
     preview: res.preview ?? res.data?.preview ?? undefined,

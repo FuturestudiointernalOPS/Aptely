@@ -176,6 +176,15 @@ export default function PermissionsMatrixPage() {
     }
     return roleRank(spec);
   }, [currentMember, customRoles]);
+  // Tabs follow the same rank rule as the backend: only roles strictly below mine are
+  // shown (the OWNER tab only to the owner), so an HR lead never sees the admin's rights.
+  const visibleRoleTabs = ALL_ROLE_TABS.filter((role) => roleRank(role) < actorRank || (role === "OWNER" && actorRank >= roleRank("OWNER")));
+  const visibleCustomRoles = customRoles.filter((role) => role.rank < actorRank);
+  useEffect(() => {
+    if (visibleRoleTabs.length > 0 && !visibleRoleTabs.some((role) => role === selectedRole)) {
+      setSelectedRole(visibleRoleTabs[0]);
+    }
+  }, [visibleRoleTabs, selectedRole]);
   const canEditRole = (role: string) =>
     canEditPermissions && role !== "OWNER" && roleRank(role) < actorRank;
   const canEditCustomRole = (rank: number) => canEditPermissions && rank < actorRank;
@@ -354,7 +363,7 @@ export default function PermissionsMatrixPage() {
 
         {/* Role tabs */}
         <div className="flex flex-wrap gap-2 mb-5">
-          {ALL_ROLE_TABS.map((role) => {
+          {visibleRoleTabs.map((role) => {
             const isActive = selectedRole === role;
             const isDirty = dirtyRoles.has(role);
             return (
@@ -564,11 +573,11 @@ export default function PermissionsMatrixPage() {
           </div>
         )}
 
-        {customRoles.length === 0 && !editingRole ? (
+        {visibleCustomRoles.length === 0 && !editingRole ? (
           <p className="text-sm text-[var(--text-muted)]">{translate("perm.custom.empty", "Aucun rôle personnalisé pour le moment.")}</p>
         ) : (
           <ul className="space-y-2">
-            {customRoles.map((role) => (
+            {visibleCustomRoles.map((role) => (
               <li
                 key={role.id}
                 className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3 bg-[var(--bg-raised)]"

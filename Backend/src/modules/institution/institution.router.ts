@@ -268,7 +268,7 @@ router.post("/settings/logo", authGuard, requirePermission("settings.edit"), set
 router.delete("/settings/logo", authGuard, requirePermission("settings.edit"), deleteLogo);
 
 // ─── Role permissions ─────────────────────────────────────────────────────────
-router.get("/permissions", ...hrGuard, getPermissions);
+router.get("/permissions", authGuard, requirePermission("members.view"), getPermissions);
 router.put("/permissions/:role", ...hrGuard, updateRolePermissions);
 
 // ─── Custom roles ─────────────────────────────────────────────────────────────

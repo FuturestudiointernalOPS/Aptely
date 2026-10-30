@@ -1446,6 +1446,18 @@ export const getPermissions = asyncHandler(
       grouped[row.role][row.permission] = row.granted;
     }
 
+    // A member only sees the permissions of roles strictly below their own rank
+    // (same rule as editing): an HR lead must not read what the admin can do.
+    const actor = await getEffectiveRole(user.id, user.institutionId, supabaseAdmin);
+    if (!actor) throw new AppError(403, "You are not a member of this institution");
+    const actorRank = await rankOf(actor.role, actor.customRoleId, user.institutionId, supabaseAdmin);
+    for (const key of Object.keys(grouped)) {
+      const rank = EDITABLE_ROLES.includes(key)
+        ? roleRank(key)
+        : await rankOf("CUSTOM", key, user.institutionId, supabaseAdmin);
+      if (rank >= actorRank) delete grouped[key];
+    }
+
     // Return flat object (not wrapped in { data }) so frontend can use it directly
     res.status(200).json(grouped);
   }

@@ -20,6 +20,7 @@ export interface DashboardStats {
   validatedApplications: number;
   rejectedApplications: number;
   activeHRMembers: number;
+  pendingAccessRequests: number;
 }
 
 export interface Role {

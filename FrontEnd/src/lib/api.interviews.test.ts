@@ -4,6 +4,9 @@ import {
   confirmBooking,
   createInterview,
   getInterviewScoresSummary,
+  generateInterviewSummary,
+  dispatchInterviewDecision,
+  submitInterviewScorecard,
   getBookingByToken,
   getInterviewAvailability,
   scheduleInterview,
@@ -26,6 +29,14 @@ describe("api interviews helpers", () => {
     apiFetchMock.mockResolvedValue({ status: 403, error: "forbidden", isPermissionError: true });
     const result = await createInterview({ applicationId: "app_1", name: "x", interviewType: "CUSTOM" });
     expect(result).toBeNull();
+  });
+
+  it("does not report a refused (403) summary, scorecard submit or decision as a success", async () => {
+    const refused = { status: 403, error: "forbidden", isPermissionError: true };
+    apiFetchMock.mockResolvedValue(refused);
+    expect(await generateInterviewSummary("int_1")).toBeNull();
+    expect(await submitInterviewScorecard("int_1", "sc_1")).toBeNull();
+    expect(await dispatchInterviewDecision({ applicationId: "app_1" } as never)).toEqual({ success: false });
   });
 
   it("maps createInterview payload/response", async () => {

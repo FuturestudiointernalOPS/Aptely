@@ -98,15 +98,15 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
     const pathname = usePathname() ?? "";
     const router = useRouter();
     const { user } = useAuth();
-    const { active } = useWorkspace();
+    const { active, roleResolved } = useWorkspace();
     const [query, setQuery] = useState("");
     const membershipBadge = useMemo<"OWNER" | "ADMIN" | "MEMBER" | null>(() => {
-        if (active.kind !== "institution") return null;
+        if (active.kind !== "institution" || !roleResolved) return null;
         const status = active.membership.status;
         if (status === "OWNER") return "OWNER";
         if (status === "ADMIN") return "ADMIN";
         return "MEMBER";
-    }, [active]);
+    }, [active, roleResolved]);
     const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
@@ -139,7 +139,7 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
 
     // Display label is role-aware (custom roles show their own name); color keys off membershipBadge.
     const membershipLabel = useMemo<string | null>(() => {
-        if (active.kind !== "institution") return null;
+        if (active.kind !== "institution" || !roleResolved) return null;
         const rs = active.membership.role_specialization;
         const customLabel = active.membership.role_custom_label;
         if (customLabel) return customLabel;  // custom label for ANY role (incl. OWNER)
@@ -154,7 +154,7 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
         };
         if (rs && map[rs]) return map[rs];
         return membershipBadge;
-    }, [active, translate, membershipBadge]);
+    }, [active, translate, membershipBadge, roleResolved]);
 
     const pathnameWithoutLocale = useMemo(() => removeLocalePrefix(pathname), [pathname]);
 
