@@ -1,8 +1,13 @@
 import { getRolesServer } from "@/lib/apiServer";
 import RolesClient from "./RolesClient";
+import { RequireCompanyAccess } from "@/components/RequireCompanyAccess";
 
 
 export default async function RolesPage() {
   const roles = await getRolesServer();
-  return <RolesClient initialRoles={roles} />;
+  return (
+    <RequireCompanyAccess page="roles">
+      <RolesClient initialRoles={roles} />
+    </RequireCompanyAccess>
+  );
 }
