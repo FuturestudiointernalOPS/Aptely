@@ -1,19 +1,60 @@
 import bundleAnalyzer from "@next/bundle-analyzer";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const withBundleAnalyzer = bundleAnalyzer({
     enabled: process.env.ANALYZE === "true",
 });
 
+// A lockfile lives in FUTURE_STUDIO/, above this app. Without an explicit root,
+// Next watches every sibling project and the dev server fans out into dozens of
+// compiler processes until the machine runs out of memory.
+const appRoot = path.dirname(fileURLToPath(import.meta.url));
+const isDev = process.env.NODE_ENV !== "production";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     reactStrictMode: true,
     allowedDevOrigins: ["127.0.0.1", "localhost"],
+    // Keep Turbopack scoped to this app — parent FUTURE_STUDIO/ lockfile otherwise
+    // makes Next watch sibling repos and OOM the machine (GNOME "Application Stopped").
+    outputFileTracingRoot: appRoot,
+    turbopack: {
+        root: appRoot,
+    },
+    // Drop compiled pages quickly in dev so a long test session does not keep
+    // the whole app resident.
+    onDemandEntries: {
+        maxInactiveAge: 15 * 1000,
+        pagesBufferLength: 1,
+    },
+    experimental: {
+        optimizePackageImports: ["lucide-react", "framer-motion", "motion"],
+    },
     compiler: {
         // Strip all console.* calls from production builds (SWC).
         // Prevents token/institutionId leakage in browser DevTools.
         removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
     },
-    transpilePackages: ["remotion", "@remotion/player", "@remotion/core"],
+    // Remotion is heavy — only force-transpile in production builds.
+    // Dev loads it on demand when the offer preview route is hit.
+    transpilePackages: isDev
+        ? []
+        : ["remotion", "@remotion/player", "@remotion/core"],
+
+    // ── Legacy marketing aliases ───────────────────────────────────────────
+    // INV-007: /talents was linked/bookmarked but never shipped — land on public discover.
+    async redirects() {
+        const locales = ["fr", "en", "de", "pt"];
+        return [
+            { source: "/talents", destination: "/offers", permanent: true },
+            ...locales.map((locale) => ({
+                source: `/${locale}/talents`,
+                destination: `/${locale}/offers`,
+                permanent: true,
+            })),
+        ];
+    },
 
     // ── Locale path rewrites ───────────────────────────────────────────────
     // Must use beforeFiles so rewrites apply BEFORE Next.js filesystem routing.
@@ -70,6 +111,17 @@ const nextConfig = {
                 ],
             },
         ];
+    },
+
+    webpack: (config, { dev }) => {
+        if (dev) {
+            config.watchOptions = {
+                ...(config.watchOptions ?? {}),
+                aggregateTimeout: 300,
+                ignored: ["**/.git/**", "**/node_modules/**", "**/.next/**"],
+            };
+        }
+        return config;
     },
 };
 
