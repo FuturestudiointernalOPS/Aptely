@@ -1,0 +1,18 @@
+{
+  "role": "Candidate",
+  "email": "candidate@aptely.demo",
+  "baseUrl": "http://localhost:3000",
+  "revalidated": "2026-10-22T15:34:00+01:00",
+  "pages": [
+    {"url": "/en/login", "status": "OK", "note": "Login → /candidate/dashboard"},
+    {"url": "/en/candidate/dashboard", "status": "OK", "note": "3 applications tracked, CANDIDAT sidebar"},
+    {"url": "/en/candidate/profile", "status": "OK", "note": "Capability record loads (0% completeness)"},
+    {"url": "/en/candidate/vault", "status": "OK", "note": "My proofs & endorsements — empty state OK"},
+    {"url": "/en/candidate/opportunities", "status": "OK", "note": "Job browse page OK"},
+    {"url": "/en/candidate/prep", "status": "OK", "note": "Interview Prep Centre OK"},
+    {"url": "/en/candidate/offers", "status": "OK", "note": "Offer hub empty state OK"},
+    {"url": "/en/candidate/messages", "status": "OK", "note": "Messages empty state OK"},
+    {"url": "Logout", "status": "OK", "note": "Logout explicite → /en/login (revalidation correcteur 15:34)"}
+  ],
+  "bugs": []
+}

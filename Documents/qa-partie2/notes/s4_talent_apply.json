@@ -1,0 +1,23 @@
+{
+  "scenario": "S4",
+  "title": "Talent applies for a job",
+  "account": "candidate@aptely.demo",
+  "gap_retest": "2026-10-23T14:33Z — API multipart CV (browser MCP still cannot setFileInputFiles)",
+  "steps": [
+    {"n": 1, "action": "Opportunities list", "result": "PASS — published Aptely Demo jobs visible"},
+    {"n": 2, "action": "Existing application history", "result": "PASS — prior apps persisted"},
+    {"n": 3, "action": "POST /applications/public/role-vZ7FqXLY with CV multipart", "result": "PASS — 202 applicationId=35ba8169-f29a-4cfe-88fa-84a411e939ae status PENDING"},
+    {"n": 4, "action": "application_documents row", "result": "PASS — file_type=CV file_name=test_cv.pdf storage_path set"},
+    {"n": 5, "action": "HR list contains new app", "result": "PASS — recruiter applications count 9"},
+    {"n": 6, "action": "UI candidate dashboard", "result": "PASS — TOTAL 5 includes Architect + QA Isolation Role; evidence gap_s4_candidate_apps_with_architect.png"},
+    {"n": 7, "action": "Candidate GET /applications/:id", "result": "OPEN note — 403 (personal workspace routing); HR GET detail 200 PENDING"}
+  ],
+  "acceptance": {
+    "apply_eligible_job": "Pass",
+    "cv_attached": "Pass (DB + API create; browser file picker still Blocked for pure UI)",
+    "history": "Pass",
+    "association_talent_job_enterprise": "Pass"
+  },
+  "overall": "Pass",
+  "evidence": ["screenshots/gap_s4_candidate_apps_with_architect.png", "notes/gap_tests_result.json"]
+}

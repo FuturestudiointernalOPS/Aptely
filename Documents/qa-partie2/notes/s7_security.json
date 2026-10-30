@@ -1,0 +1,46 @@
+{
+  "scenario": "S7",
+  "title": "Access control & enterprise isolation",
+  "gap_retest": "2026-10-23 — created 2nd enterprise QA Isolation Org for cross-org tests",
+  "steps": [
+    {"n": 1, "action": "Create Org B via POST /institution/create as qa-owner-b-*@aptely.demo", "result": "PASS — institutionId=8ec815c7-659a-4660-bd7b-1ee92a4adbc0"},
+    {"n": 2, "action": "Org B GET /applications", "result": "PASS — only own apps (1 after candidate applied to Org B role); does not include Org A sample"},
+    {"n": 3, "action": "Org B deep-link GET Org A application API", "result": "PASS — 403 Access denied; PATCH status/notes → 404"},
+    {"n": 4, "action": "Org B UI deep-link Org A application BEFORE fix", "result": "FAIL/SECURITY — ApplicationPanel treated 403 payload as app → Unknown candidate + Reject/Validate buttons"},
+    {"n": 5, "action": "Fix ApplicationPanel isApiSuccess gate", "result": "FIXED — UI shows Access denied. This application is outside your organization."},
+    {"n": 6, "action": "MEMBER deep-link applications (prior)", "result": "FIXED earlier — P2-S7-01 403"},
+    {"n": 7, "action": "Super Admin platform visibility", "result": "Pass"}
+  ],
+  "bugs": [
+    {
+      "id": "P2-S7-01",
+      "severity": "Critical",
+      "status": "FIXED",
+      "feature": "MEMBER can view all applications",
+      "fix": "permissions.middleware.ts DEFAULT_PERMISSIONS MEMBER/ACTIVE → []",
+      "evidence": "screenshots/s7_member_sees_applications.png"
+    },
+    {
+      "id": "P2-S7-02",
+      "severity": "High",
+      "status": "FIXED",
+      "feature": "Cross-org application detail UI shell on 403",
+      "expected": "Access denied / no action buttons",
+      "actual": "Rendered detail with Reject/Validate using permission-error object as app",
+      "fix": "FrontEnd/src/components/ApplicationPanel.tsx — isApiSuccess before setApp",
+      "evidence": "screenshots/gap_s7_cross_org_denied_after_fix.png"
+    }
+  ],
+  "test_data": {
+    "orgA": "Aptely Demo",
+    "orgB": "QA Isolation Org 1792765999719",
+    "orgB_owner": "qa-owner-b-1792765999719@aptely.demo",
+    "password": "AptelyDemo123!"
+  },
+  "overall": "Pass (API isolation + UI deep-link denial after fix)",
+  "evidence": [
+    "screenshots/gap_s7_orgB_applications.png",
+    "screenshots/gap_s7_cross_org_denied_after_fix.png",
+    "notes/gap_tests_result.json"
+  ]
+}

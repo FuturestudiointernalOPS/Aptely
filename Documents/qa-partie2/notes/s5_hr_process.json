@@ -1,0 +1,31 @@
+{
+  "scenario": "S5",
+  "title": "HR receives & processes application",
+  "account": "recruiter@aptely.demo then hiring-manager@aptely.demo",
+  "pdf_reconstruction": "S5 steps truncated in PDF after logout. Reconstituted from §10 Recruitment Workflow.",
+  "steps": [
+    {"n": 1, "action": "Login recruiter → /applications", "result": "Initially TOTAL 0 (false empty) + API 500"},
+    {"n": 2, "action": "Investigate", "result": "Root causes: (1) match_results.overall_score invalid column → 500; (2) getAllApplications ignored {data,meta} shape"},
+    {"n": 3, "action": "Fix + retest HM /applications", "result": "FIXED — TOTAL 8 apps with Demo Candidate / Sofia / etc., statuses FINISHED/VALIDATED"},
+    {"n": 4, "action": "Status change action", "result": "Not retested UI action this session (list+detail routing verified)"},
+    {"n": 5, "action": "Talent status consistency", "result": "Pass — Talent dashboard shows same FINISHED apps"}
+  ],
+  "bugs": [
+    {
+      "id": "P2-S5-01",
+      "severity": "Critical",
+      "status": "FIXED",
+      "feature": "HR Applications list 500",
+      "fix": "applications.controller.ts: match_results(final_score) instead of overall_score"
+    },
+    {
+      "id": "P2-S5-02",
+      "severity": "High",
+      "status": "FIXED",
+      "feature": "getAllApplications always []",
+      "fix": "api.core.ts unwrap {data,meta} from apiFetch"
+    }
+  ],
+  "evidence": ["screenshots/s5_recruiter_apps_empty.png", "screenshots/s5_applications_fixed.png"],
+  "overall": "Pass after fix"
+}
