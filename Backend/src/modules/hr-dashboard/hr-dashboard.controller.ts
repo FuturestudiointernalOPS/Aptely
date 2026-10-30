@@ -14,13 +14,15 @@ export const getDashboardStats = asyncHandler(
 
     const { data: roleRows, error: rolesError } = await supabaseAdmin
       .from("roles")
-      .select("id")
+      .select("id, status")
       .eq("institution_id", institutionId);
 
     if (rolesError) throw new AppError(500, "Failed to fetch roles");
 
     const roleIds = (roleRows ?? []).map((r) => r.id);
     const totalRoles = roleIds.length;
+    // Only published roles are "open": drafts, closed and cancelled roles are not.
+    const activeRoleIds = (roleRows ?? []).filter((r) => r.status === "ACTIVE").map((r) => r.id as string);
     const safeRoleIds = roleIds.length > 0 ? roleIds : [""];
 
     const [
@@ -39,8 +41,21 @@ export const getDashboardStats = asyncHandler(
       supabaseAdmin.from("institution_members").select("id", { count: "exact", head: true }).eq("institution_id", institutionId).in("status", ["OWNER", "ADMIN", "ACTIVE"]),
     ]);
 
+    // Open roles that have not received a single application yet (all of them, not only the latest).
+    let activeRolesWithoutApplications = activeRoleIds.length;
+    if (activeRoleIds.length > 0) {
+      const { data: appliedRows } = await supabaseAdmin
+        .from("applications")
+        .select("role_id")
+        .in("role_id", activeRoleIds);
+      const applied = new Set((appliedRows ?? []).map((a) => a.role_id as string));
+      activeRolesWithoutApplications = activeRoleIds.filter((id) => !applied.has(id)).length;
+    }
+
     res.status(200).json({
       totalRoles,
+      activeRoles: activeRoleIds.length,
+      activeRolesWithoutApplications,
       totalApplications: totalApplications ?? 0,
       pendingApplications: pendingApplications ?? 0,
       analyzingApplications: analyzingApplications ?? 0,
@@ -88,7 +103,23 @@ export const getRecentRoles = asyncHandler(
       };
     });
 
-    res.status(200).json({ data: normalized });
+    // The role list needs the real applicant count (the front used to default it to 0).
+    const recentIds = normalized.map((r) => r.id as string);
+    const counts = new Map<string, number>();
+    if (recentIds.length > 0) {
+      const { data: appRows } = await supabaseAdmin
+        .from("applications")
+        .select("role_id")
+        .in("role_id", recentIds);
+      for (const a of appRows ?? []) {
+        const rid = a.role_id as string;
+        counts.set(rid, (counts.get(rid) ?? 0) + 1);
+      }
+    }
+
+    res.status(200).json({
+      data: normalized.map((r) => ({ ...r, applicationsCount: counts.get(r.id as string) ?? 0 })),
+    });
   }
 );
 
