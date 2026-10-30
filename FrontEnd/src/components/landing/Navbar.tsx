@@ -28,7 +28,11 @@ const Navbar: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
+    const onScroll = () => {
+      const next = window.scrollY > 20;
+      setScrolled((prev) => (prev === next ? prev : next));
+    };
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -42,7 +46,7 @@ const Navbar: React.FC = () => {
           transition={{ type: "spring", damping: 22, stiffness: 120 }}
           className={`container mx-auto max-w-6xl rounded-2xl px-5 py-3 flex items-center justify-between transition-all duration-300 ${
             scrolled
-              ? "bg-[var(--bg-surface)] backdrop-blur-xl border border-[var(--border)] shadow-2xl shadow-black/20"
+              ? "bg-[var(--bg-surface)] border border-[var(--border)] shadow-lg shadow-black/10"
               : "bg-transparent border border-transparent"
           }`}
         >
@@ -142,7 +146,7 @@ const Navbar: React.FC = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={{ duration: 0.18 }}
-            className="fixed top-[76px] left-4 right-4 z-[99] bg-[var(--bg-surface)] backdrop-blur-xl rounded-2xl border border-[var(--border)] shadow-2xl shadow-black/20 p-4 flex flex-col gap-1"
+            className="fixed top-[76px] left-4 right-4 z-[99] bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-lg shadow-black/10 p-4 flex flex-col gap-1"
           >
             {NAV_LINKS.map((item) => (
               <Link

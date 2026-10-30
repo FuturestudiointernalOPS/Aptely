@@ -1,0 +1,28 @@
+{
+  "role": "Member (employé)",
+  "email": "member@aptely.demo",
+  "baseUrl": "http://localhost:3000",
+  "revalidated": "2026-10-22T15:35:00+01:00",
+  "pages": [
+    {"url": "/en/login", "status": "OK", "note": "Login → /company/dashboard"},
+    {"url": "/en/company/dashboard", "status": "OK", "note": "MEMBER badge; sidebar limited (Dashboard, Calendar, Settings) — no Recruitment section"},
+    {"url": "/en/company/calendar", "status": "OK", "note": "Calendar charge; Cal.com non connecté; pas d'events"},
+    {"url": "/en/company/employees", "status": "OK", "note": "Page loads but shows Permission denied: employees.view (expected)"},
+    {"url": "/en/company/employees/leave", "status": "SKIP", "note": "Non retesté — même pattern perms que employees.view"},
+    {"url": "/en/company/recruitment/roles/create", "status": "OK", "note": "After fix: redirected to /roles (was fully open before — BUG-002)"},
+    {"url": "/en/company/settings/permissions", "status": "OK", "note": "Deep-link accessible en lecture seule — « Read-only — only role managers can edit » (denial write attendu, pas redirect)"},
+    {"url": "Logout", "status": "OK", "note": "Logout → /en/login"}
+  ],
+  "bugs": [
+    {
+      "id": "BUG-002",
+      "severity": "P1",
+      "page": "/company/recruitment/roles/create",
+      "steps": "Login as member@aptely.demo → open /company/recruitment/roles/create",
+      "expected": "Blocked / redirected (no roles.create permission)",
+      "actual": "Full Create Job Post Sheet form rendered (API still checks roles.create server-side)",
+      "status": "FIXED",
+      "fix": "FrontEnd create page gates on hasPermission('roles.create'); Backend POST /roles now requirePermission('roles.create')"
+    }
+  ]
+}

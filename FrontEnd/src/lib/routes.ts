@@ -76,6 +76,8 @@ export const ROUTES = {
 
   // Public job discovery
   discover: "/offers",
+  /** @deprecated Legacy marketing URL — next.config redirects /talents → /offers */
+  talents: "/offers",
 
   // Marketing / public pages
   demo: "/demo",

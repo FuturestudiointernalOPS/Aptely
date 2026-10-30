@@ -124,8 +124,8 @@ export default function JoinPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-deep)] flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-[var(--accent)]/[0.04] rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-15%] right-[-5%] w-[400px] h-[400px] bg-blue-500/[0.03] rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-[-10%] left-[-5%] w-64 h-64 bg-[var(--accent)]/[0.06] rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-5%] w-56 h-56 bg-blue-500/[0.05] rounded-full blur-2xl pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">

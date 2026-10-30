@@ -1,0 +1,38 @@
+{
+  "scenario": "S3",
+  "title": "Talent registration & profile completion",
+  "account": "candidate@aptely.demo",
+  "steps": [
+    {"n": 1, "action": "Login Talent", "result": "OK → candidate space"},
+    {"n": 2, "action": "Open /candidate/profile", "result": "OK Capability Record form"},
+    {"n": 3, "action": "Fill headline, location, bio, LinkedIn; Save", "result": "OK"},
+    {"n": 4, "action": "Navigate away → return", "result": "PASS — fields persisted; completeness 45%"},
+    {"n": 5, "action": "Skills / experience / education Add UI", "result": "Present; not fully filled this session"},
+    {"n": 6, "action": "CV upload on profile", "result": "UI present (PDF/DOC max 10MB); file set not completed in automation"},
+    {"n": 7, "action": "Portfolio / website field", "result": "Website field present (empty)"},
+    {"n": 8, "action": "Completion indicator", "result": "PASS exists — but dashboard later showed 25% vs profile 45% (inconsistency)"}
+  ],
+  "information_to_verify": {
+    "personal_details": "Pass",
+    "contact_details": "Pass (email from account)",
+    "professional_summary": "Pass (bio/headline persisted)",
+    "skills": "Needs Investigation / partial (Add UI only)",
+    "work_experience": "Needs Investigation / partial",
+    "portfolio": "Pass (field exists)",
+    "cv_upload": "Blocked (automation cannot set file input; UI verified)",
+    "linkedin": "Pass",
+    "profile_status": "Pass with defect P2-S3-01"
+  },
+  "bugs": [
+    {
+      "id": "P2-S3-01",
+      "severity": "Medium",
+      "status": "OPEN",
+      "feature": "Profile completeness %",
+      "expected": "Same % on profile and dashboard",
+      "actual": "Profile 45% after save; dashboard shows 25%",
+      "evidence": "screenshots/s3_profile_persisted.png"
+    }
+  ],
+  "overall": "Pass partial"
+}

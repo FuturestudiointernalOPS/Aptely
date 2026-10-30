@@ -1,0 +1,40 @@
+{
+  "scenario": "S1",
+  "title": "Super Admin oversight",
+  "date": "2026-10-23",
+  "account": "gclud79@gmail.com",
+  "role_mapping_note": "Super Admin = /admin via super_admins table. Enterprise ≠ separate login — company workspace.",
+  "pdf_reconstruction": "S1 Expected Result in PDF incorrectly pasted meeting bullets from S2. Reconstituted from §10 Super Admin AC.",
+  "steps": [
+    {"n": 1, "action": "Login Super Admin", "result": "OK → /en/admin"},
+    {"n": 2, "action": "Navigate /admin/institutions", "result": "OK Companies list"},
+    {"n": 3, "action": "Confirm enterprises visible", "result": "PASS — 1 institution: Aptely Demo"},
+    {"n": 4, "action": "Open enterprise details drawer", "result": "PARTIAL — members/team OK (7, 5 active: OWNER,ADMIN,HR_LEAD,STANDARD_HR,HIRING_MANAGER,RECRUITER,MEMBER); job postings show 0 despite platform metrics counting 4 roles"},
+    {"n": 5, "action": "/admin/users list", "result": "PASS — 12 users (prior session + re-check)"},
+    {"n": 6, "action": "/admin overview stats", "result": "PASS after SA-001 fix — 4 job postings, 1 active company"}
+  ],
+  "acceptance": {
+    "view_all_enterprises": "Pass",
+    "view_platform_users": "Pass",
+    "enterprise_details_users": "Pass",
+    "hr_associated_correct_enterprise": "Pass",
+    "talent_records_in_scope": "Pass",
+    "enterprise_job_list_in_drawer": "Fail"
+  },
+  "bugs": [
+    {
+      "id": "P2-S1-01",
+      "severity": "Medium",
+      "status": "OPEN",
+      "feature": "Admin institution drawer job postings",
+      "expected": "List recruitment roles (fiches) for the institution",
+      "actual": "JOB POSTINGS (0) / No job postings while GET /admin/metrics funnel.jobPositions=4",
+      "notes": "getInstitutionById already queries roles by institution_id. Likely data: roles not linked to this institution_id, or query/filter issue. Needs Investigation during S2 company roles list."
+    }
+  ],
+  "evidence": [
+    "screenshots/s1_companies_list.png",
+    "screenshots/s1_company_detail.png"
+  ],
+  "overall": "Pass partial"
+}

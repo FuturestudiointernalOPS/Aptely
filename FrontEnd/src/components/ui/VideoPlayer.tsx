@@ -37,9 +37,9 @@ export function VideoPlayer({ inputProps, autoPlay = false }: VideoPlayerProps) 
         component={OfferComp}
         inputProps={localizedProps}
         durationInFrames={300}
-        compositionWidth={1280}
-        compositionHeight={720}
-        fps={60}
+        compositionWidth={960}
+        compositionHeight={540}
+        fps={30}
         style={{ width: "100%", height: "100%" }}
         controls
         autoPlay={autoPlay}

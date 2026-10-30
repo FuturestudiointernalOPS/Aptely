@@ -89,7 +89,7 @@ const ROLE_COLORS: Record<string, string> = {
   RECRUITER:      "text-[var(--info)] bg-[var(--info-bg)]",
 };
 
-// Job posting (roles.status) colours.
+// role_status enum: ACTIVE | DRAFT | CLOSED | CANCELLED (not PUBLISHED)
 const JOB_STATUS_COLORS: Record<string, string> = {
   ACTIVE:    "text-[var(--success)]",
   DRAFT:     "text-[var(--warning)]",

@@ -1,0 +1,16 @@
+{
+  "role": "Recruiter",
+  "email": "recruiter@aptely.demo",
+  "baseUrl": "http://localhost:3000",
+  "pages": [
+    {"url": "/en/login", "status": "OK", "note": "Login OK after auth rate-limit bump for QA"},
+    {"url": "/en/company/dashboard", "status": "OK", "note": "RECRUITER badge, company sidebar"},
+    {"url": "/en/company/recruitment/roles", "status": "OK", "note": "4 job post sheets listed"},
+    {"url": "/en/company/recruitment/applications", "status": "OK", "note": "TOTAL 0 — empty but page OK"},
+    {"url": "/en/company/recruitment/interviews", "status": "OK", "note": "0 interviews"},
+    {"url": "/en/company/calendar", "status": "OK", "note": "Calendar loads; Cal.com not connected message"},
+    {"url": "/en/company/recruitment/cv-studio", "status": "OK", "note": "CV Studio — HR Analysis accessible"},
+    {"url": "Logout", "status": "OK", "note": "Logout checklisté en MD session initiale (non rejoué correcteur)"}
+  ],
+  "bugs": []
+}

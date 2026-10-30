@@ -89,14 +89,22 @@ app.use(globalRateLimiter);
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get("/health", async (_req, res) => {
   const timestamp = new Date().toISOString();
+  const { getEmailDeliveryStatus } = await import("./services/email.service");
+  const email = getEmailDeliveryStatus();
   try {
     const { supabaseAdmin } = await import("./config/supabase");
     const start = Date.now();
     const { error } = await supabaseAdmin.from("institutions").select("id").limit(1);
     const latencyMs = Date.now() - start;
-    res.json({ status: error ? "degraded" : "ok", db: error ? "error" : "ok", latency_ms: latencyMs, timestamp });
+    res.json({
+      status: error ? "degraded" : "ok",
+      db: error ? "error" : "ok",
+      latency_ms: latencyMs,
+      email,
+      timestamp,
+    });
   } catch {
-    res.status(503).json({ status: "error", db: "unreachable", timestamp });
+    res.status(503).json({ status: "error", db: "unreachable", email, timestamp });
   }
 });
 

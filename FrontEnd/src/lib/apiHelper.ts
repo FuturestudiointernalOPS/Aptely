@@ -180,7 +180,10 @@ export async function apiFetch(
           error: errorMessage || "You do not have permission to perform this action.",
           isPermissionError: true,
         };
-        console.error(`[API] ${safeEndpoint} Permission denied: ${errorMessage}`);
+        // warn (not error) — expected for role-gated routes; avoids Next.js red overlay spam
+        if (isDev) {
+          console.warn(`[API] ${safeEndpoint} Permission denied: ${errorMessage}`);
+        }
         // Dispatch a global event so the UI can show a toast/notification
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("aptely:permission-denied", { detail: permError }));
@@ -190,7 +193,7 @@ export async function apiFetch(
 
       if (res.status === 404) {
         if (isDev) {
-          console.error(`[API] ${safeEndpoint} failed (404): Resource not found`);
+          console.warn(`[API] ${safeEndpoint} failed (404): Resource not found`);
         }
         return null;
       }

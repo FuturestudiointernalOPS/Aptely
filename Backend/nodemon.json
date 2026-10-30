@@ -3,6 +3,7 @@
     "require": ["tsconfig-paths/register"]
   },
   "watch": ["src", ".env"],
+  "delay": 1000,
   "ext": "ts,json",
   "ignore": ["src/**/*.spec.ts"],
   "exec": "ts-node -r tsconfig-paths/register src/index.ts"

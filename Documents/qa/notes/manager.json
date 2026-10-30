@@ -1,0 +1,42 @@
+{
+  "role": "Manager (hiring-manager)",
+  "email": "hiring-manager@aptely.demo",
+  "started": "2026-10-22T15:04:00+01:00",
+  "revalidated": "2026-10-22T15:32:00+01:00",
+  "baseUrl": "http://localhost:3000",
+  "pages": [
+    {"url": "/en/login", "status": "OK", "note": "Login success → redirect company/dashboard"},
+    {"url": "/en/company/dashboard", "status": "OK", "note": "Dashboard loads; HIRING MANAGER badge"},
+    {"url": "/en/company/recruitment/roles", "status": "OK", "note": "4 job posts listed after hydrate"},
+    {"url": "/en/company/recruitment/roles/{id}", "status": "OK", "note": "(+1) Opened Architect detail /roles/c993a023-ebc1-42fb-ba9f-cf9ee3b624fd"},
+    {"url": "/en/company/recruitment/applications", "status": "SKIP", "note": "(+1) ouvrir candidature impossible — « No applications found » (TOTAL 0)"},
+    {"url": "/en/company/recruitment/interviews", "status": "OK", "note": "3 interviews/scorecards visible (session initiale)"},
+    {"url": "/en/company/recruitment/offers", "status": "OK", "note": "Offers page loads, 0 offers; console apiFetch error overlay in dev"},
+    {"url": "/en/company/settings/organization", "status": "OK", "note": "Organisation / départements — 0 departments empty state"},
+    {"url": "/en/company/settings/teams", "status": "OK", "note": "Find Your Team — No institutions found"},
+    {"url": "/en/company/analytics", "status": "OK", "note": "Après fix BUG-003: HR Analytics charge (données vides / empty states)"},
+    {"url": "Logout", "status": "OK", "note": "Logout → /en/login"}
+  ],
+  "bugs": [
+    {
+      "id": "BUG-001",
+      "severity": "P1",
+      "page": "/company/* sidebar",
+      "steps": "Login as hiring-manager → land on /company/dashboard before memberships hydrate",
+      "expected": "Company sidebar with HIRING MANAGER badge",
+      "actual": "Candidate sidebar (CANDIDAT) intermittent until reload",
+      "status": "FIXED",
+      "fix": "FrontEnd/src/lib/workspace.tsx — keep institution mode while loading/on memberships failure; retry memberships fetch once"
+    },
+    {
+      "id": "BUG-003",
+      "severity": "P1",
+      "page": "/en/company/analytics",
+      "steps": "Login HM → /company/analytics",
+      "expected": "HR Analytics page loads (empty data OK)",
+      "actual": "ERROR 500 UI — Cannot read properties of undefined (reading 'map')",
+      "status": "FIXED",
+      "fix": "FrontEnd/src/app/company/analytics/page.tsx — optional chain byDepartment/monthlyHires + averageDays null-safe"
+    }
+  ]
+}

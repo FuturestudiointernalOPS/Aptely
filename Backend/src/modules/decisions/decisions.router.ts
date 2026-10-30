@@ -106,36 +106,36 @@ router.post(
 /**
  * @route   GET /decisions/applications/:id/state
  * @desc    Returns current recommendation, decision, and ratification state
- * @access  applications.decide
+ * @access  applications.view (read) — mutations stay on applications.decide
  */
 router.get(
   "/applications/:id/state",
   authGuard,
-  requirePermission("applications.decide"),
+  requirePermission("applications.view"),
   getDecisionState
 );
 
 /**
  * @route   GET /decisions/applications/:id/history
  * @desc    Get full decision history (includes recommend/decide/ratify steps)
- * @access  applications.decide
+ * @access  applications.view (read)
  */
 router.get(
   "/applications/:id/history",
   authGuard,
-  requirePermission("applications.decide"),
+  requirePermission("applications.view"),
   getDecisionHistory
 );
 
 /**
  * @route   GET /decisions/applications/:id/audit-logs
  * @desc    Get full audit trail for an application
- * @access  applications.decide
+ * @access  applications.view (read)
  */
 router.get(
   "/applications/:id/audit-logs",
   authGuard,
-  requirePermission("applications.decide"),
+  requirePermission("applications.view"),
   getApplicationAuditLogs
 );
 
