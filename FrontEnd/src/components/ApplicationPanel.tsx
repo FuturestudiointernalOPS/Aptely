@@ -27,6 +27,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useRouter } from "next/navigation";
 import { DecisionMaker } from "@/components/DecisionMaker";
 import { DecisionRatifier } from "@/components/DecisionRatifier";
+import { useWorkspace } from "@/lib/workspace";
 import {
     ROUTES, appInterviewPath, appCandidatePath, candidateInterviewsPath,
     applicationApiPath, appStatusApi, decisionStateApi, decisionAuditApi,
@@ -154,6 +155,8 @@ export function ApplicationPanel({
     const tr = (key: string, fallback: string) => t(locale, key, fallback);
     const localeTag = locale === "fr" ? "fr-FR" : "en-US";
     const toast = useToast();
+    const { hasPermission } = useWorkspace();
+    const canManageOnboarding = hasPermission("onboarding.manage");
 
     const [app, setApp] = useState<ApplicationDetail | null>(null);
     const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
@@ -207,16 +210,19 @@ export function ApplicationPanel({
         if (!id) return;
         setChecklistLoading(true);
         try {
-            const [cl, tpls] = await Promise.all([
-                getOnboardingChecklist(id),
-                listOnboardingTemplates({ limit: 50 }),
-            ]);
+            const cl = await getOnboardingChecklist(id);
             setChecklist(cl);
-            setTemplates(tpls.data || []);
-            if (tpls.data?.length > 0) setSelectedTemplateId(tpls.data[0].id);
+            // Templates require onboarding.manage — skip the call when missing (avoids 403 overlay).
+            if (canManageOnboarding) {
+                const tpls = await listOnboardingTemplates({ limit: 50 });
+                setTemplates(tpls.data || []);
+                if (tpls.data?.length > 0) setSelectedTemplateId(tpls.data[0].id);
+            } else {
+                setTemplates([]);
+            }
         } catch { /* silent */ }
         finally { setChecklistLoading(false); }
-    }, [id]);
+    }, [id, canManageOnboarding]);
 
     useEffect(() => {
         if (!id) { setLoading(false); return; }

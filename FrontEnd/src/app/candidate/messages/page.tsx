@@ -100,28 +100,77 @@ export default function MessagesPage() {
     });
   }, [loading, router, user, isPersonal]);
 
-  // Supabase Realtime
+  // Realtime with REST poll fallback (avoids Next overlay when WebSocket is unavailable)
   useEffect(() => {
     if (!selectedApp || !user?.token) return;
 
-    supabase.auth.setSession({ access_token: user.token, refresh_token: "" }).catch(() => {});
+    const appId = selectedApp;
+    let pollId: ReturnType<typeof setInterval> | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    const channel = supabase
-      .channel(`messages:${selectedApp}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
-        const newMsg = payload.new as Message;
-        reloadMessages(selectedApp);
-        setThreads((prev) =>
-          prev.map((t) =>
-            t.application_id === selectedApp
-              ? { ...t, last_message: { content: newMsg.content, sent_at: newMsg.sent_at }, last_message_at: newMsg.sent_at }
-              : t
-          )
+    const refresh = () => {
+      void reloadMessages(appId);
+    };
+
+    const startPoll = () => {
+      if (pollId) return;
+      pollId = setInterval(refresh, 8_000);
+    };
+
+    const cleanup = () => {
+      if (channel) {
+        void supabase.removeChannel(channel);
+        channel = null;
+      }
+      if (pollId) {
+        clearInterval(pollId);
+        pollId = null;
+      }
+    };
+
+    if (typeof WebSocket === "undefined") {
+      console.warn("[messages] WebSocket unavailable — polling");
+      startPoll();
+      return cleanup;
+    }
+
+    try {
+      void supabase.auth
+        .setSession({ access_token: user.token, refresh_token: "" })
+        .catch(() => {});
+      channel = supabase
+        .channel(`messages:${appId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "messages" },
+          (payload) => {
+            const newMsg = payload.new as Message;
+            void reloadMessages(appId);
+            setThreads((prev) =>
+              prev.map((t) =>
+                t.application_id === appId
+                  ? {
+                      ...t,
+                      last_message: { content: newMsg.content, sent_at: newMsg.sent_at },
+                      last_message_at: newMsg.sent_at,
+                    }
+                  : t,
+              ),
+            );
+          },
         );
-      })
-      .subscribe();
+      channel.subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn("[messages] Realtime failed — polling", err ?? status);
+          startPoll();
+        }
+      });
+    } catch (err) {
+      console.warn("[messages] Realtime subscribe failed — polling", err);
+      startPoll();
+    }
 
-    return () => { supabase.removeChannel(channel); };
+    return cleanup;
   }, [selectedApp, user?.token, reloadMessages]);
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);

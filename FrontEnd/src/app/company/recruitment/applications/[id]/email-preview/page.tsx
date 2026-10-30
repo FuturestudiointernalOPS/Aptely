@@ -33,7 +33,47 @@ export default function EmailPreviewPage() {
             return;
         }
         apiFetch(appEmailPreviewApi(id), "HR").then((res) => {
-            if (res) setData(res);
+            // Backend returns { templates, ready } — map to page shape when templates exist.
+            if (res && typeof res === "object") {
+                const payload = res as {
+                    templates?: {
+                        approval?: { html?: string };
+                        rejection?: { html?: string };
+                        approvedCount?: number;
+                        rejectedCount?: number;
+                        approvalTemplate?: string;
+                        rejectionTemplate?: string;
+                    } | null;
+                    approvedCount?: number;
+                    rejectedCount?: number;
+                    approvalTemplate?: string;
+                    rejectionTemplate?: string;
+                    ready?: boolean;
+                };
+                if (payload.ready === false || payload.templates === null) {
+                    setData(null);
+                } else if (payload.templates) {
+                    setData({
+                        approvedCount: payload.templates.approvedCount ?? payload.approvedCount ?? 0,
+                        rejectedCount: payload.templates.rejectedCount ?? payload.rejectedCount ?? 0,
+                        approvalTemplate:
+                            payload.templates.approvalTemplate ??
+                            payload.templates.approval?.html ??
+                            "",
+                        rejectionTemplate:
+                            payload.templates.rejectionTemplate ??
+                            payload.templates.rejection?.html ??
+                            "",
+                    });
+                } else if (payload.approvalTemplate || payload.rejectionTemplate) {
+                    setData({
+                        approvedCount: payload.approvedCount ?? 0,
+                        rejectedCount: payload.rejectedCount ?? 0,
+                        approvalTemplate: payload.approvalTemplate ?? "",
+                        rejectionTemplate: payload.rejectionTemplate ?? "",
+                    });
+                }
+            }
             setLoading(false);
         });
     }, [id]);

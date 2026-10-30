@@ -71,6 +71,7 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
         return active.membership.status;
     }, [active, roleResolved]);
     const isResizing = useRef(false);
+    const resizeFrame = useRef<number | null>(null);
     const currentLocale = useMemo(() => getClientLocale(pathname), [pathname]);
     const pathnameWithoutLocale = useMemo(() => removeLocalePrefix(pathname), [pathname]);
     const translate = useMemo(() => {
@@ -119,14 +120,22 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isResizing.current || isCollapsed) return;
-        requestAnimationFrame(() => {
-            const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, e.clientX));
+        const clientX = e.clientX;
+        if (resizeFrame.current !== null) return;
+        resizeFrame.current = requestAnimationFrame(() => {
+            resizeFrame.current = null;
+            if (!isResizing.current) return;
+            const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, clientX));
             setSidebarWidth(newWidth);
         });
     }, [isCollapsed]);
 
     const handleMouseUp = useCallback(() => {
         isResizing.current = false;
+        if (resizeFrame.current !== null) {
+            cancelAnimationFrame(resizeFrame.current);
+            resizeFrame.current = null;
+        }
         document.body.style.cursor = "default";
         document.body.style.userSelect = "auto";
     }, []);
@@ -165,30 +174,29 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
         // Built-in roles use group membership; CUSTOM roles use their permission set.
         const canItem = (roles: string[], perm: Parameters<typeof hasPermission>[0]) =>
             isCustom ? hasPermission(perm) : roles.includes(effectiveRole);
-        const canRoles = isCustom
-            ? (hasPermission("roles.create") || hasPermission("roles.update"))
-            : can(FULL_HR);
+        // Fiches: nav = qui peut *voir* la liste. Création/édition restent gated par roles.create/update en page.
+        const canRolesNav = isCustom
+            ? (hasPermission("roles.create") || hasPermission("roles.update") || hasPermission("applications.view"))
+            : can(HR_FAMILY);
+        // Offres: permission réelle (pas seulement le groupe FULL_HR) — RECRUITER a offers.manage en DEFAULT_PERMISSIONS.
+        const canOffersNav = hasPermission("offers.manage");
 
         // Recruitment items, each gated (group for built-in, permission for CUSTOM).
         const rhItems: NavItem[] = [
-            ...(canRoles ? [{ name: translate("nav.roles", "Fiches de poste"), href: localizePath(ROUTES.company.recruitment.roles, currentLocale), baseHref: ROUTES.company.recruitment.roles, icon: FileText }] : []),
+            ...(canRolesNav ? [{ name: translate("nav.roles", "Fiches de poste"), href: localizePath(ROUTES.company.recruitment.roles, currentLocale), baseHref: ROUTES.company.recruitment.roles, icon: FileText }] : []),
             // "Candidatures" removed from sidebar — access via role pipeline (?app=) or direct link
             ...(canItem(HR_FAMILY, "interviews.manage") ? [{ name: translate("nav.interviews", "Entretiens"), href: localizePath(ROUTES.company.recruitment.interviews, currentLocale), baseHref: ROUTES.company.recruitment.interviews, icon: CalendarRange }] : []),
             // "Interviewer" removed from sidebar — merged into Entretiens page (tabs: Mes entretiens / Tous)
             // "Décisions" kanban removed — redondant avec le pipeline rôle (recommend/decide/ratify déjà accessible via ?app=)
-            // Offres temporarily disabled — re-enable: ...(canItem(FULL_HR, "offers.manage") ?[{ name: translate("nav.offers", "Offres"), href: localizePath(ROUTES.company.recruitment.offers, currentLocale), baseHref: ROUTES.company.recruitment.offers, icon: Gift }] : []),
+            ...(canOffersNav ? [{ name: translate("nav.offers", "Offres"), href: localizePath(ROUTES.company.recruitment.offers, currentLocale), baseHref: ROUTES.company.recruitment.offers, icon: Gift }] : []),
         ];
 
         // ─── Module visibility gates (Phase 4) ───────────────────────────────────
-        // Phase 4 modules temporarily disabled — re-enable by restoring the conditions below:
-        // showEmployees: isCustom ? hasPermission("employees.view") : can(FULL_HR)
-        // showPayroll:   isCustom ? hasPermission("payroll.view") : can(FULL_HR)
-        // showGoals:     isCustom ? hasPermission("goals.view") : can(HR_FAMILY)
-        // showRetention: isCustom ? hasPermission("retention.view") : can(FULL_HR)
-        const showEmployees = false;
-        const showPayroll   = false;
-        const showGoals     = false;
-        const showRetention = false;
+        // Built-in roles: group membership. CUSTOM: explicit permission.
+        const showEmployees = isCustom ? hasPermission("employees.view") : can(FULL_HR);
+        const showPayroll   = isCustom ? hasPermission("payroll.view") : can(FULL_HR);
+        const showGoals     = isCustom ? hasPermission("goals.view") : can(HR_FAMILY);
+        const showRetention = isCustom ? hasPermission("retention.view") : can(FULL_HR);
 
         const adminItems: NavItem[] = [
             ...((isCustom ? hasPermission("members.view") : can(ADMIN_ONLY))
@@ -226,6 +234,8 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
             // Fiches employés + gestion des congés. Exclut RECRUITER + HIRING_MANAGER
             // car ils n'ont pas accès aux données RH internes (salaires, contrats, etc.).
             ...(showEmployees ? [{
+                // alwaysShow: permission already gated — institution_modules often still inactive on demo.
+                alwaysShow: true,
                 sectionKey: "hr" as ModuleKey,
                 label: translate("nav.module.employees", "Employés"),
                 items: [
@@ -237,6 +247,7 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
             // Goals/OKRs ouverts à HR_FAMILY (inclut HIRING_MANAGER) car les managers
             // co-pilotent les objectifs de leurs équipes directement dans ce module.
             ...(showGoals ? [{
+                alwaysShow: true,
                 sectionKey: "goals" as ModuleKey,
                 label: translate("nav.module.performance", "Performance & Croissance"),
                 items: [
@@ -258,6 +269,7 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
             // Périodes de paie, entrées, workflow de paiement.
             // RECRUITER et HIRING_MANAGER exclus — données salariales confidentielles.
             ...(showPayroll ? [{
+                alwaysShow: true,
                 sectionKey: "payroll" as ModuleKey,
                 label: translate("nav.module.payroll", "Paie"),
                 items: [
