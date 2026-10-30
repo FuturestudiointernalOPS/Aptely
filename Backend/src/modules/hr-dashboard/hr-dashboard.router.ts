@@ -7,8 +7,9 @@ import { getRecentApplications } from "./hr-dashboard.controller";
 
 const router = Router();
 
-// All dashboard routes require analytics.view in the active institution workspace.
-const hrGuard = [authGuard, requirePermission("analytics.view")];
+// Recruitment widgets follow applications.view: recruiters and hiring managers hold it
+// but not analytics.view, and used to get an empty dashboard because of the old guard.
+const hrGuard = [authGuard, requirePermission("applications.view")];
 
 /**
  * @route   GET /hr/dashboard/stats
@@ -30,6 +31,7 @@ router.get("/recent-roles", ...hrGuard, getRecentRoles);
  * @access  HR
  */
 router.get("/recent-activity", ...hrGuard, getRecentActivity);
-router.get("/recent-applications", authGuard, requirePermission("analytics.view"), getRecentApplications);
+router.get("/recent-applications", ...hrGuard, getRecentApplications);
+
 
 export default router;
