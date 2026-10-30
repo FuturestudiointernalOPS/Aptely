@@ -98,9 +98,11 @@ const JOB_STATUS_COLORS: Record<string, string> = {
 };
 
 const ACTIVE_MEMBER_STATUSES = new Set(["OWNER", "ADMIN", "ACTIVE"]);
+
 function dateLocale(locale: string) {
   return locale === "en" ? "en-US" : "fr-FR";
 }
+
 
 function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () => void }) {
   const locale = getClientLocale();

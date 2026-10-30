@@ -183,12 +183,13 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-[var(--text-muted)]">{tr("admin.users.fieldJoinedAt", "Rejoint le")}</span>
                           <span className="text-[var(--text-secondary)]">
-                            {new Date(m.joined_at).toLocaleDateString("fr-FR")}
+                            {new Date(m.joined_at).toLocaleDateString(dateLocale(locale))}
                           </span>
                         </div>
                       )}
                     </div>
                   ))}
+
                 </div>
               ) : (
                 <p className="text-xs text-[var(--text-muted)] italic">{tr("admin.users.noInstitution", "Aucune institution")}</p>
@@ -244,7 +245,7 @@ function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }
                         <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
                           <Calendar size={11} />
                           <span className="truncate">
-                            {a.institution_name ?? "—"} · {new Date(a.created_at).toLocaleDateString("fr-FR")}
+                            {a.institution_name ?? "—"} · {new Date(a.created_at).toLocaleDateString(dateLocale(locale))}
                           </span>
                         </div>
                       </div>

@@ -242,10 +242,13 @@ export const getUserById = asyncHandler(
     }));
 
     res.status(200).json({
-      profile: { ...profile, banned_until: authUserRes.data.user?.banned_until ?? null },
+      profile: {
+        ...profile,
+        banned_until: authUserRes.data.user?.banned_until ?? null,
+      },
       memberships: membershipList,
-      // Kept for backward compatibility with older clients: first membership.
-      membership: membershipList[0] ?? null,
+      // Kept for backward compatibility with older clients: active membership first.
+      membership: membershipList.find((m) => m.status === "ACTIVE") ?? membershipList[0] ?? null,
       talentDna: talentRes.data ?? null,
       recentApplications: applications.map((a) => {
         const instId = roleInst.get(a.role_id as string) ?? null;

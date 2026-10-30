@@ -273,6 +273,7 @@ export async function getAllApplications(): Promise<Application[]> {
     if (batch.length === 0 || apps.length >= total) break;
   }
   return apps.map((a: any) => ({
+
     applicationId: a.id || a.applicationId,
     candidateId: safeEntityId(a.candidate_id) || safeEntityId(a.candidateId),
     candidateName: a.candidateName || a.profiles?.full_name || "Unknown",
