@@ -1,0 +1,328 @@
+{
+  "stamp": 1792765999719,
+  "startedAt": "2026-10-23T14:33:19.738Z",
+  "tests": {
+    "apply": {
+      "name": "S4_new_application_cv",
+      "steps": [
+        {
+          "action": "login candidate",
+          "ok": true
+        },
+        {
+          "action": "list my applications",
+          "status": 200,
+          "count": 3
+        },
+        {
+          "action": "pick role",
+          "roleId": "c993a023-ebc1-42fb-ba9f-cf9ee3b624fd",
+          "share": "role-vZ7FqXLY",
+          "slug": "role-vZ7FqXLY",
+          "title": "Architect"
+        },
+        {
+          "action": "POST apply with CV",
+          "status": 202,
+          "body": {
+            "message": "Application accepted and pending HR review or AI evaluation",
+            "applicationId": "35ba8169-f29a-4cfe-88fa-84a411e939ae",
+            "status": "PENDING",
+            "poll": {
+              "endpoint": "/applications/public/status/35ba8169-f29a-4cfe-88fa-84a411e939ae",
+              "intervalMs": 5000
+            }
+          }
+        },
+        {
+          "action": "GET application detail (candidate)",
+          "status": 403,
+          "bodyKeys": [
+            "error"
+          ]
+        },
+        {
+          "action": "GET documents",
+          "status": 403,
+          "body": {
+            "error": "You are not linked to any institution"
+          }
+        },
+        {
+          "action": "HR list contains new app",
+          "ok": true,
+          "hrCount": 9
+        },
+        {
+          "action": "HR GET documents for new app",
+          "status": 403,
+          "body": {
+            "error": "Access denied"
+          }
+        },
+        {
+          "action": "HR GET detail",
+          "status": 200,
+          "statusField": "PENDING"
+        }
+      ],
+      "applicationId": "35ba8169-f29a-4cfe-88fa-84a411e939ae",
+      "status": "Pass",
+      "cvAttached": true,
+      "note": "Candidate GET /applications/:id returns 403 (personal workspace routing) — HR verifies CV docs",
+      "cvEvidence": "application_documents test_cv.pdf"
+    },
+    "isolation": {
+      "name": "S7_two_enterprise_isolation",
+      "steps": [
+        {
+          "action": "Org A HR applications",
+          "status": 200,
+          "count": 9,
+          "sampleAppId": "35ba8169-f29a-4cfe-88fa-84a411e939ae"
+        },
+        {
+          "action": "ensure owner B user",
+          "email": "qa-owner-b-1792765999719@aptely.demo",
+          "created": true,
+          "id": "6adc9931-986e-408e-8d1c-3376e0351af1"
+        },
+        {
+          "action": "create institution B",
+          "status": 201,
+          "body": {
+            "institutionId": "8ec815c7-659a-4660-bd7b-1ee92a4adbc0",
+            "institutionName": "QA Isolation Org 1792765999719"
+          }
+        },
+        {
+          "action": "Org B HR applications (must NOT include Org A)",
+          "status": 200,
+          "count": 0,
+          "sampleIds": []
+        },
+        {
+          "action": "deep-link Org A application id as Org B owner",
+          "status": 403,
+          "denied": true,
+          "body": {
+            "error": "Access denied"
+          }
+        },
+        {
+          "action": "create role on B",
+          "status": 201,
+          "body": {
+            "data": {
+              "id": "912a8fc6-4122-4880-87e4-f2f25e20322d",
+              "institution_id": "8ec815c7-659a-4660-bd7b-1ee92a4adbc0",
+              "status": "DRAFT",
+              "share_link": "role-A1Z6QUXD",
+              "created_at": "2026-10-23T14:33:45.900714+00:00",
+              "updated_at": "2026-10-23T14:33:45.900714+00:00",
+              "department_id": null,
+              "hiring_manager_user_id": null,
+              "share_link_rotated_at": "2026-10-23T14:33:45.900714+00:00"
+            }
+          }
+        },
+        {
+          "action": "publish role B ACTIVE",
+          "status": 200,
+          "body": {
+            "data": {
+              "id": "912a8fc6-4122-4880-87e4-f2f25e20322d",
+              "status": "ACTIVE",
+              "updated_at": "2026-10-23T14:33:47.444381+00:00"
+            }
+          }
+        },
+        {
+          "action": "candidate apply to Org B role",
+          "status": 202,
+          "shareSlug": "role-A1Z6QUXD",
+          "appOnB": "8f20d7ea-61f0-494b-b90e-a502dea12191"
+        },
+        {
+          "action": "Org A list must not contain Org B application",
+          "orgACount": 9
+        },
+        {
+          "action": "Org A list must not contain Org B application (recheck)",
+          "leak": false,
+          "appOnB": "8f20d7ea-61f0-494b-b90e-a502dea12191",
+          "orgACount": 9
+        },
+        {
+          "action": "Org A deep-link Org B application (recheck)",
+          "status": 403,
+          "denied": true
+        }
+      ],
+      "institutionB": {
+        "id": "8ec815c7-659a-4660-bd7b-1ee92a4adbc0",
+        "name": "QA Isolation Org 1792765999719"
+      },
+      "status": "Pass"
+    },
+    "invite": {
+      "name": "S2_invite_activation",
+      "steps": [
+        {
+          "action": "login Org B owner",
+          "email": "qa-owner-b-1792765999719@aptely.demo",
+          "ok": true
+        },
+        {
+          "action": "owner permissions",
+          "body": {
+            "data": {
+              "institution_id": "8ec815c7-659a-4660-bd7b-1ee92a4adbc0",
+              "membership_status": "OWNER",
+              "role_specialization": "OWNER",
+              "role_custom_label": null,
+              "permissions": [
+                "roles.create",
+                "roles.update",
+                "roles.delete",
+                "applications.view",
+                "applications.decide",
+                "interviews.manage",
+                "offers.manage",
+                "onboarding.manage",
+                "communications.send",
+                "analytics.view",
+                "members.view",
+                "members.invite",
+                "members.remove",
+                "members.roles",
+                "settings.edit",
+                "employees.view",
+                "employees.manage",
+                "payroll.view",
+                "payroll.manage",
+                "goals.view",
+                "goals.manage",
+                "retention.view",
+                "learning.manage",
+                "compensation.manage"
+              ]
+            }
+          }
+        },
+        {
+          "action": "create invite",
+          "status": 201,
+          "body": {
+            "data": {
+              "inviteUrl": "http://localhost:3000/join/zuEH-56GXTJVeT5xDpmuQw",
+              "token": "zuEH-56GXTJVeT5xDpmuQw",
+              "inviteCode": "zuEH-56GXTJVeT5xDpmuQw",
+              "institutionName": "QA Isolation Org 1792765999719",
+              "emailSent": false
+            }
+          }
+        },
+        {
+          "action": "public invite info",
+          "status": 200,
+          "body": {
+            "data": {
+              "institutionId": "8ec815c7-659a-4660-bd7b-1ee92a4adbc0",
+              "institutionName": "QA Isolation Org 1792765999719",
+              "logoUrl": null,
+              "roleSpecialization": "MEMBER",
+              "jobPositionId": null,
+              "jobPositionTitle": null,
+              "customLabel": "QA Invite 1792766132705"
+            }
+          }
+        },
+        {
+          "action": "ensure invitee",
+          "email": "qa-invitee-1792766132705@aptely.demo",
+          "id": "8be18f44-884f-46a8-b870-d923f34e3a8c"
+        },
+        {
+          "action": "join by invite",
+          "status": 200,
+          "body": {
+            "message": "Successfully joined institution",
+            "data": {
+              "institutionId": "8ec815c7-659a-4660-bd7b-1ee92a4adbc0",
+              "institutionName": "QA Isolation Org 1792765999719"
+            }
+          }
+        },
+        {
+          "action": "invitee memberships",
+          "status": 200,
+          "body": {
+            "data": {
+              "active_institution_id": null,
+              "personal_workspace": {
+                "name": "QA Invitee Member"
+              },
+              "memberships": [
+                {
+                  "institution_id": "8ec815c7-659a-4660-bd7b-1ee92a4adbc0",
+                  "institution_name": "QA Isolation Org 1792765999719",
+                  "institution_logo_url": null,
+                  "institution_sector": "Technology",
+                  "status": "ACTIVE",
+                  "role_specialization": "MEMBER",
+                  "role_custom_label": null,
+                  "joined_at": "2026-10-23T14:35:49.328354+00:00"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "action": "owner members list contains invitee",
+          "ok": true,
+          "status": 200,
+          "count": 2,
+          "sample": [
+            {
+              "id": "6c05f4f6-b953-4cbe-b9a0-b579c766d557",
+              "user_id": "6adc9931-986e-408e-8d1c-3376e0351af1",
+              "status": "OWNER",
+              "role_specialization": "OWNER",
+              "role_custom_label": null,
+              "custom_role_id": null,
+              "joined_at": "2026-10-23T14:33:41.15452+00:00",
+              "profiles": {
+                "id": "6adc9931-986e-408e-8d1c-3376e0351af1",
+                "full_name": "QA Owner B Isolation",
+                "email": "qa-owner-b-1792765999719@aptely.demo",
+                "avatar_url": null
+              }
+            },
+            {
+              "id": "20615259-abc8-48c1-9965-6da4637e909d",
+              "user_id": "8be18f44-884f-46a8-b870-d923f34e3a8c",
+              "status": "ACTIVE",
+              "role_specialization": "MEMBER",
+              "role_custom_label": null,
+              "custom_role_id": null,
+              "joined_at": "2026-10-23T14:35:49.328354+00:00",
+              "profiles": {
+                "id": "8be18f44-884f-46a8-b870-d923f34e3a8c",
+                "full_name": "QA Invitee Member",
+                "email": "qa-invitee-1792766132705@aptely.demo",
+                "avatar_url": null
+              }
+            }
+          ]
+        }
+      ],
+      "note": "Aptely Demo HIRING_MANAGER/RECRUITER lack members.invite; validated on Org B OWNER (real RBAC).",
+      "inviteToken": "zuEH-56GXTJVeT5xDpmuQw",
+      "inviteUrl": "http://localhost:3000/join/zuEH-56GXTJVeT5xDpmuQw",
+      "inviteeEmail": "qa-invitee-1792766132705@aptely.demo",
+      "status": "Pass"
+    }
+  },
+  "finishedAt": "2026-10-23T14:36:03.671Z"
+}

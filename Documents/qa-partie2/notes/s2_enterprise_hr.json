@@ -1,0 +1,22 @@
+{
+  "scenario": "S2",
+  "title": "Enterprise / HR setup (membres, jobs, meetings) + invite activation gap",
+  "accounts": ["hiring-manager@aptely.demo", "recruiter@aptely.demo", "qa-owner-b-1792765999719@aptely.demo"],
+  "steps": [
+    {"n": 1, "action": "Login HM/recruiter Aptely Demo", "result": "PASS — company workspace"},
+    {"n": 2, "action": "Team / settings members", "result": "PASS — members listed"},
+    {"n": 3, "action": "Jobs published", "result": "PASS — 4 ACTIVE roles"},
+    {"n": 4, "action": "Meetings/interviews", "result": "Needs Investigation / partial (dashboard vs assigned list)"},
+    {"n": 5, "action": "Create invite as hiring-manager", "result": "Blocked on Aptely Demo — HIRING_MANAGER lacks members.invite (defaults)"},
+    {"n": 6, "action": "Invite activation E2E on Org B OWNER", "result": "PASS — POST invitations → join token → invitee MEMBER in team list"},
+    {"n": 7, "action": "UI Team Management shows invitee", "result": "PASS — QA Invitee Member qa-invitee-*@aptely.demo Joined Oct 23, 2026"}
+  ],
+  "invite": {
+    "status": "Pass",
+    "note": "Demo HM/Recruiter cannot invite by RBAC design; validated full create→join→membership on Org B OWNER",
+    "invitee": "qa-invitee-1792766132705@aptely.demo",
+    "inviteUrl": "http://localhost:3000/join/zuEH-56GXTJVeT5xDpmuQw"
+  },
+  "overall": "Pass partial (invite Pass on Org B; Aptely Demo invite permission absent for HM)",
+  "evidence": ["screenshots/gap_s2_invitee_in_team.png", "notes/gap_tests_result.json"]
+}

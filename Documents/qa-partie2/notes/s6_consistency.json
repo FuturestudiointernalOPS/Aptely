@@ -1,0 +1,16 @@
+{
+  "scenario": "S6",
+  "title": "Cross-role data consistency",
+  "checks": [
+    {"item": "Enterprise record", "status": "Pass", "notes": "Aptely Demo visible SA + HR"},
+    {"item": "Enterprise members", "status": "Pass", "notes": "Admin 7 / HR settings 6 (self omitted)"},
+    {"item": "HR user relationship", "status": "Pass", "notes": "Same institution workspace"},
+    {"item": "Job posting", "status": "Pass", "notes": "4 roles company + talent opportunities; SA drawer still 0 (P2-S1-01 OPEN)"},
+    {"item": "Talent profile", "status": "Pass partial", "notes": "Persisted fields; completeness % mismatch P2-S3-01"},
+    {"item": "CV/portfolio", "status": "Needs Investigation", "notes": "Upload UI only"},
+    {"item": "Job application", "status": "Pass after fix", "notes": "Talent 3 + HR 8 after S5 fixes"},
+    {"item": "Application status", "status": "Pass", "notes": "FINISHED/VALIDATED consistent Talent↔HR"},
+    {"item": "Meeting", "status": "Needs Investigation", "notes": "Interviews exist on dashboard; HM assigned list empty"}
+  ],
+  "overall": "Pass partial"
+}
