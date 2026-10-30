@@ -11,6 +11,7 @@ import { Users, Search, Filter, ArrowUpRight, Briefcase, Calendar, User2, Sparkl
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RequireCompanyAccess } from "@/components/RequireCompanyAccess";
 
 const FILTERS = ["ALL", "PENDING", "ANALYSING", "FINISHED", "VALIDATED", "REJECTED", "STOPPED"] as const;
 type StatusFilter = (typeof FILTERS)[number];
@@ -44,7 +45,7 @@ function statusBadge(status: string): string {
     }
 }
 
-export default function ApplicationsPage() {
+function ApplicationsPageContent() {
     useRequireInstitution();
     const locale = getClientLocale();
     const { hasPermission } = useWorkspace();
@@ -217,5 +218,13 @@ export default function ApplicationsPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function ApplicationsPage() {
+    return (
+        <RequireCompanyAccess page="applications">
+            <ApplicationsPageContent />
+        </RequireCompanyAccess>
     );
 }
