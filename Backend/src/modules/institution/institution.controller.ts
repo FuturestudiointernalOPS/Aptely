@@ -1,9 +1,9 @@
 import crypto from "crypto";
 import { Response } from "express";
-import { Resend } from "resend";
 import { supabaseAdmin } from "@/config/supabase";
 import { env } from "@/config/env";
 import { buildLogoPath } from "@/services/storage.service";
+import { sendEmailDirect } from "@/services/email.service";
 import { AppError } from "@/middleware/error.middleware";
 import { asyncHandler } from "@/utils/helpers";
 import { retryWithBackoff } from "@/utils/retry";
@@ -28,8 +28,6 @@ import {
   DEFAULT_PERSONAL_SETTINGS,
 } from "./institution.service";
 export { checkPermission } from "./institution.service";
-
-const resend = new Resend(env.RESEND_API_KEY);
 import type {
   UpdateInstitutionInput,
   JoinRequestActionInput,
@@ -1069,11 +1067,8 @@ export const createInviteLink = asyncHandler(
     const inviteCode = existing.token;
     if (recipientEmail) {
       try {
-        const { error: inviteEmailError } = await resend.emails.send({
-          from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
-          to: recipientEmail,
-          subject: `Vous êtes invité à rejoindre ${institution.name} sur Aptely`,
-          html: `
+        const subject = `Vous êtes invité à rejoindre ${institution.name} sur Aptely`;
+        const html = `
             <div style="background:#0f1117;padding:32px 0;font-family:sans-serif;">
               <div style="max-width:520px;margin:0 auto;background:#1a1d2e;border-radius:12px;padding:40px;color:#f0f0f0;">
                 <div style="text-align:center;margin-bottom:28px;">
@@ -1095,12 +1090,11 @@ export const createInviteLink = asyncHandler(
                 <p style="color:#6b7280;font-size:12px;margin:8px 0 0;">Si vous n'attendiez pas cette invitation, ignorez cet email.</p>
               </div>
             </div>
-          `,
-          text: `Vous êtes invité à rejoindre ${institution.name} sur Aptely.\n\nCode d'invitation : ${inviteCode}\n\nRejoindre ici : ${inviteUrl}`,
-        });
-        if (inviteEmailError) {
-          console.error("[INVITE] Failed to send invite email:", inviteEmailError.message);
-          // Don't throw — the invite link was created — but inform the frontend
+          `;
+        const text = `Vous êtes invité à rejoindre ${institution.name} sur Aptely.\n\nCode d'invitation : ${inviteCode}\n\nRejoindre ici : ${inviteUrl}`;
+        const delivered = await sendEmailDirect(recipientEmail, subject, html, text);
+        if (!delivered.success) {
+          console.error("[INVITE] Failed to send invite email:", delivered.error);
           res.status(201).json({
             data: {
               inviteUrl,

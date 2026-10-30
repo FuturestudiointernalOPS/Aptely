@@ -31,6 +31,9 @@ const envSchema = z.object({
   CRON_SECRET: z.string().min(16, "CRON_SECRET must be at least 16 chars"),
   RESEND_FROM_EMAIL: z.string().email().default("noreply@aptely.com"),
   RESEND_FROM_NAME: z.string().default("Aptely"),
+  // Dev-only: log emails to stdout instead of calling Resend (no delivery).
+  // Set "true" when RESEND_API_KEY is missing/invalid locally.
+  EMAIL_LOG_ONLY: z.enum(["true", "false"]).default("false"),
 
   // CORS
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),

@@ -5,6 +5,53 @@ import { retryWithBackoff } from "@/utils/retry";
 
 const resend = new Resend(env.RESEND_API_KEY);
 
+/** Permanent Resend auth failures — retrying the queue is useless. */
+function isPermanentResendAuthError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("api key is invalid") ||
+    m.includes("invalid api key") ||
+    m.includes("missing api key") ||
+    m.includes("unauthorized") ||
+    /\b401\b/.test(m)
+  );
+}
+
+export type EmailDeliveryMode = "live" | "log-only";
+
+export function getEmailDeliveryStatus(): {
+  mode: EmailDeliveryMode;
+  from: string;
+  hint?: string;
+} {
+  if (env.EMAIL_LOG_ONLY === "true") {
+    return {
+      mode: "log-only",
+      from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
+      hint: "EMAIL_LOG_ONLY=true — emails are logged, not sent via Resend",
+    };
+  }
+  return {
+    mode: "live",
+    from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
+  };
+}
+
+function logEmailDevOnly(to: string, subject: string, text: string): string {
+  const id = `log-only-${Date.now()}`;
+  process.stderr.write(
+    `[EMAIL][LOG_ONLY] to=${to} subject=${JSON.stringify(subject)} id=${id}\n` +
+      `[EMAIL][LOG_ONLY] preview=${JSON.stringify(text.slice(0, 240))}\n`
+  );
+  return id;
+}
+
+if (env.EMAIL_LOG_ONLY === "true") {
+  process.stderr.write(
+    "⚠️  EMAIL_LOG_ONLY=true — Resend disabled; emails are logged to stdout only\n"
+  );
+}
+
 function esc(raw: string): string {
   return raw
     .replace(/&/g, "&amp;")
@@ -198,6 +245,12 @@ async function sendEmailWithRetry(
     console.warn(`[EMAIL] Disposable email detected: ${to}`);
   }
 
+  // Dev degraded mode — never call Resend; treat as soft success so métier flows continue.
+  if (env.EMAIL_LOG_ONLY === "true") {
+    const id = logEmailDevOnly(to, subject, text);
+    return { success: true, id };
+  }
+
   try {
     // Try to send with Resend (with retry logic)
     const result = await retryWithBackoff(
@@ -223,7 +276,15 @@ async function sendEmailWithRetry(
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[EMAIL] Failed to send to ${to}: ${errorMsg}`);
 
-    // Add to queue for retry later
+    const permanent = isPermanentResendAuthError(errorMsg);
+    if (permanent) {
+      console.error(
+        "[EMAIL] Permanent Resend auth error — not retrying. " +
+          "Fix RESEND_API_KEY / RESEND_FROM_EMAIL (verified domain) or set EMAIL_LOG_ONLY=true for local dev."
+      );
+    }
+
+    // Queue: pending for transient errors; failed immediately for permanent auth errors.
     try {
       const { data, error: queueError } = await supabaseAdmin
         .from("email_queue")
@@ -232,15 +293,22 @@ async function sendEmailWithRetry(
           subject,
           html,
           text,
-          status: "pending",
-          attempts: 0,
+          status: permanent ? "failed" : "pending",
+          attempts: permanent ? 5 : 0,
           max_attempts: 5,
+          last_error: errorMsg,
         })
         .select("id")
         .single();
 
       if (!queueError && data) {
-        return { success: false, id: data.id, error: `Queued for retry: ${errorMsg}` };
+        return {
+          success: false,
+          id: data.id,
+          error: permanent
+            ? `Email delivery misconfigured (Resend): ${errorMsg}`
+            : `Queued for retry: ${errorMsg}`,
+        };
       }
     } catch (queueErr) {
       console.error(
@@ -295,7 +363,8 @@ export async function sendApprovalEmail(ctx: CandidateEmailContext): Promise<voi
   );
 
   if (!result.success) {
-    throw new Error(result.error || "Failed to send approval email");
+    // Soft-fail: decision / métier flows must not crash when email infra is down.
+    console.warn(`[EMAIL] Approval email not delivered: ${result.error}`);
   }
 }
 
@@ -334,7 +403,7 @@ export async function sendRejectionEmail(ctx: CandidateEmailContext): Promise<vo
   );
 
   if (!result.success) {
-    throw new Error(result.error || "Failed to send rejection email");
+    console.warn(`[EMAIL] Rejection email not delivered: ${result.error}`);
   }
 }
 
@@ -401,10 +470,41 @@ async function processEmailQueue(): Promise<{
     return { processed: 0, sent: 0, failed: 0 };
   }
 
+  // Dev: drain pending as failed without hammering Resend.
+  if (env.EMAIL_LOG_ONLY === "true") {
+    const ids = (pendingEmails as EmailQueueItem[]).map((e) => e.id);
+    await supabaseAdmin
+      .from("email_queue")
+      .update({
+        status: "failed",
+        attempts: 5,
+        last_error: "Skipped: EMAIL_LOG_ONLY=true (Resend not called in local/dev)",
+      })
+      .in("id", ids);
+    console.warn(
+      `[EMAIL_QUEUE] EMAIL_LOG_ONLY — marked ${ids.length} pending email(s) as failed (not sent)`
+    );
+    return { processed: ids.length, sent: 0, failed: ids.length };
+  }
+
   let sent = 0;
   let failed = 0;
+  let permanentAuthFailure: string | null = null;
 
   for (const email of pendingEmails as EmailQueueItem[]) {
+    if (permanentAuthFailure) {
+      failed++;
+      await supabaseAdmin
+        .from("email_queue")
+        .update({
+          status: "failed",
+          attempts: email.max_attempts,
+          last_error: permanentAuthFailure,
+        })
+        .eq("id", email.id);
+      continue;
+    }
+
     try {
       // Send email with retry
       const result = await retryWithBackoff(
@@ -439,20 +539,28 @@ async function processEmailQueue(): Promise<{
 
       // Increment attempts and update error
       const newAttempts = (email.attempts || 0) + 1;
-      if (newAttempts >= email.max_attempts) {
-        // Max retries reached, mark as failed
+      const giveUp =
+        newAttempts >= email.max_attempts || isPermanentResendAuthError(errorMsg);
+
+      if (isPermanentResendAuthError(errorMsg)) {
+        permanentAuthFailure = errorMsg;
+        console.error(
+          `[EMAIL_QUEUE] Permanent Resend auth error — failing remaining pending jobs: ${errorMsg}`
+        );
+      }
+
+      if (giveUp) {
         await supabaseAdmin
           .from("email_queue")
           .update({
             status: "failed",
-            attempts: newAttempts,
+            attempts: Math.max(newAttempts, email.max_attempts),
             last_error: errorMsg,
           })
           .eq("id", email.id);
 
-        console.error(`[EMAIL_QUEUE] Marked as failed (reached max attempts): ${email.id}`);
+        console.error(`[EMAIL_QUEUE] Marked as failed: ${email.id} — ${errorMsg}`);
       } else {
-        // Retry again later
         await supabaseAdmin
           .from("email_queue")
           .update({
