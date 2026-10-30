@@ -753,6 +753,8 @@
   "apply.public.success6": "Success at 6 months",
   "apply.public.skills": "Required skills",
   "apply.public.applyNow": "Apply for this position",
+  "apply.public.step1.emailHint": "Address used to contact you about this application.",
+  "apply.public.error.emailInvalid": "Please enter a valid email address.",
   "apply.public.beforeApplying.title": "Before you apply",
   "apply.public.beforeApplying.review": "Your application is reviewed by the recruitment team.",
   "apply.public.beforeApplying.accuracy": "Accurate, complete information makes it easier to assess your application.",

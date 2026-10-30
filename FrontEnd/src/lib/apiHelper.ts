@@ -283,7 +283,14 @@ export async function apiSend(
     }
   }
 
-  const res = await fetch(url, { ...options, headers });
+  let res = await fetch(url, { ...options, headers });
+
+  // A long form (e.g. a job application) can outlive the access token: renew the session
+  // once and resend, instead of losing what the user typed.
+  if (res.status === 401 && safeEndpoint !== "/auth/refresh") {
+    const refreshedToken = await refreshHrSessionIfPossible();
+    if (refreshedToken) res = await fetch(url, { ...options, headers });
+  }
 
   if (!res.ok) {
     let message = `HTTP ${res.status}`;

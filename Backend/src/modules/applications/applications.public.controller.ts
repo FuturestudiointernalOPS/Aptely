@@ -86,6 +86,18 @@ export const applyPublic = asyncHandler(async (req: AuthenticatedRequest, res: R
   const candidateId = req.user.id;
   const email = req.user.email;
 
+  // Contact details typed in the form. The e-mail defaults to the account's; it may differ
+  // (e.g. a personal address) but must be valid. LinkedIn is optional.
+  const submittedEmail = typeof req.body.email === "string" ? req.body.email.trim() : "";
+  if (submittedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submittedEmail)) {
+    throw new AppError(400, "Invalid email address");
+  }
+  const contactEmail = submittedEmail || email;
+  const submittedLinkedin = typeof req.body.linkedin === "string" ? req.body.linkedin.trim() : "";
+  if (submittedLinkedin && !/^https?:\/\//i.test(submittedLinkedin)) {
+    throw new AppError(400, "Invalid LinkedIn URL");
+  }
+
   const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select("full_name")
@@ -219,8 +231,12 @@ export const applyPublic = asyncHandler(async (req: AuthenticatedRequest, res: R
   const newIdentity = {
     ...currentIdentity,
     name: fullName,
-    email,
-    links: { ...(currentIdentity.links || {}), cv: cvUrl || currentIdentity?.links?.cv }
+    email: contactEmail,
+    links: {
+      ...(currentIdentity.links || {}),
+      cv: cvUrl || currentIdentity?.links?.cv,
+      ...(submittedLinkedin ? { linkedin: submittedLinkedin } : {}),
+    },
   };
 
   const updatePayload = {

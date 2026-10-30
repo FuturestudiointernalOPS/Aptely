@@ -172,6 +172,6 @@ router.patch("/:id/close", authGuard, requirePermission("applications.decide"), 
  * @desc    HR relance l'IA pour une candidature précise
  * @access  HR
  */
-router.post("/:id/relaunch-matching", authGuard, requirePermission("applications.view"), relaunchApplicationMatching);
+router.post("/:id/relaunch-matching", authGuard, requirePermission("applications.decide"), relaunchApplicationMatching);
 
 export default router;

@@ -15,6 +15,8 @@ const INDUSTRIES = ["Tech", "Finance", "Healthcare", "E-commerce", "Manufacturin
 const CONTRACT_TYPES = ["FULL_TIME", "PART_TIME", "FREELANCE", "CONTRACT", "INTERNSHIP"];
 const WORK_AUTH_OPTIONS = ["CITIZEN", "VISA_SPONSORED", "OTHER"];
 
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
 export default function PublicApplyPage() {
   const params = useParams();
   const router = useRouter();
@@ -180,6 +182,10 @@ export default function PublicApplyPage() {
       setError(tr("apply.public.error.nameRequired", "Name is required on step 1."));
       return;
     }
+    if (!isValidEmail(identity.email)) {
+      setError(tr("apply.public.error.emailInvalid", "Veuillez saisir une adresse e-mail valide."));
+      return;
+    }
     // Motivation fields are optional (they help matching but can be in CV)
     // No longer block submission
 
@@ -239,6 +245,10 @@ export default function PublicApplyPage() {
     if (step === 1) {
       if (!identity.fullName.trim()) {
         setError(tr("apply.public.error.nameRequired", "Full name is required."));
+        return;
+      }
+      if (!isValidEmail(identity.email)) {
+        setError(tr("apply.public.error.emailInvalid", "Veuillez saisir une adresse e-mail valide."));
         return;
       }
       if (!cvFile && !existingCvUrl) {
@@ -635,8 +645,9 @@ export default function PublicApplyPage() {
                   <input type="text" value={identity.fullName} onChange={e => setIdentity({...identity, fullName: e.target.value})} className={inputCls} placeholder={tr("apply.public.step1.fullNamePlaceholder", "John Doe")} required />
                 </div>
                 <div>
-                  <label className={labelCls}>{tr("apply.public.step1.email", "Email")} *</label>
-                  <input type="email" value={identity.email} className={`${inputCls} opacity-70`} placeholder={tr("apply.public.step1.emailPlaceholder", "john@example.com")} disabled />
+                  <label className={labelCls}>{tr("apply.public.step1.email", "Email")} <span className="text-red-400">*</span></label>
+                  <input type="email" value={identity.email} onChange={e => setIdentity({...identity, email: e.target.value})} className={inputCls} placeholder={tr("apply.public.step1.emailPlaceholder", "john@example.com")} autoComplete="email" required />
+                  <p className="mt-1 text-xs text-gray-400">{tr("apply.public.step1.emailHint", "Adresse utilisée pour vous contacter au sujet de cette candidature.")}</p>
                 </div>
               </div>
               <div>

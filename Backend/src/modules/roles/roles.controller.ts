@@ -388,6 +388,7 @@ export const evaluateRole = asyncHandler(
     if (!institutionId) throw new AppError(403, "You are not linked to any institution");
 
     const id = req.params["id"] as string;
+    await checkPermission(req.user!.id, institutionId, "applications.decide", supabaseAdmin);
     await assertRoleOwnership(id, institutionId, supabaseAdmin);
 
     const { data: updated, error } = await supabaseAdmin

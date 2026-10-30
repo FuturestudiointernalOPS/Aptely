@@ -34,11 +34,6 @@ export const metadata: Metadata = {
     title: "Aptely",
     description: "Aptely : intelligence RH augmentée pour des décisions de recrutement plus rapides et plus justes.",
   },
-  icons: {
-    icon: [
-      { url: "/icon.png", type: "image/png", sizes: "32x32" },
-    ],
-  },
 };
 
 export const viewport: Viewport = {
