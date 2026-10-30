@@ -104,6 +104,8 @@ interface WorkspaceContextValue {
   memberships: WorkspaceMembership[];
   isPersonal: boolean;
   loading: boolean;
+  /** False while the active membership is only a placeholder (role unknown yet): do not show a role-based UI. */
+  roleResolved: boolean;
   permissions: Set<Permission>;
   hasPermission: (perm: Permission) => boolean;
   activeModules: AppModule[];
@@ -281,6 +283,14 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     return { kind: "institution", institutionId: fallbackId, membership };
   }, [activeId, memberships, personalLabel, loading, user?.institutionId]);
 
+  // While memberships load, `active` holds a placeholder (status ACTIVE, no role) that reads as a plain
+  // member. Callers must not render a role-specific UI from it. If loading ends without the
+  // membership ever arriving, fall back to the placeholder rather than waiting forever.
+  const roleResolved =
+    active.kind !== "institution" ||
+    memberships.some((m) => m.institution_id === active.institutionId) ||
+    !loading;
+
   const hasPermission = useCallback(
     (perm: Permission) => permissions.has(perm),
     [permissions]
@@ -296,6 +306,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     memberships,
     isPersonal: active.kind === "personal",
     loading,
+    roleResolved,
     permissions,
     hasPermission,
     activeModules,
