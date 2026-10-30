@@ -65,7 +65,8 @@ export async function createInterview(payload: {
     body: JSON.stringify(payload),
   });
 
-  if (!res) return null;
+  // A 403 comes back as a truthy { isPermissionError } object: not a success.
+  if (!isApiSuccess(res)) return null;
 
   return {
     id: res.id,
@@ -105,7 +106,7 @@ export async function assignInterviewers(
     body: JSON.stringify({ interviewerProfiles, secondaryCollectiveWeight }),
   });
 
-  if (!res) return null;
+  if (!isApiSuccess(res)) return null;
 
   return {
     id: res.id ?? interviewId,
@@ -173,7 +174,7 @@ export async function scheduleInterview(
     body: JSON.stringify(payload),
   });
 
-  if (!res) return null;
+  if (!isApiSuccess(res)) return null;
 
   return {
     id: res.id ?? interviewId,
