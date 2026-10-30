@@ -6,7 +6,8 @@
     "node": "22.x"
   },
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "NODE_OPTIONS='--max-old-space-size=1024 --max-semi-space-size=64' next dev -p 3000",
+    "dev:clean": "rm -rf .next && npm run dev",
     "build": "node scripts/prebuild.js && next build --webpack",
     "start": "next start",
     "lint": "eslint",
