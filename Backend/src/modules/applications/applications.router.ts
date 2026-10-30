@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { authGuard, requirePersonalWorkspace } from "@/middleware/auth.middleware";
-import { requirePermission } from "@/middleware/permissions.middleware";
+import {
+  requirePermission,
+  requirePermissionOrPersonalWorkspace,
+} from "@/middleware/permissions.middleware";
 import { validate, validateQuery } from "@/middleware/validate.middleware";
 import {
   updateApplicationStatusSchema,
@@ -104,10 +107,15 @@ router.patch(
 
 /**
  * @route   GET /applications/:id
- * @desc    Détail d'une candidature (HR: le rôle doit appartenir à son institution)
- * @access  HR
+ * @desc    Détail candidature — HR (applications.view) ou talent (workspace perso, sa propre app)
+ * @access  HR | Candidate (own application)
  */
-router.get("/:id", authGuard, requirePermission("applications.view"), getApplicationById);
+router.get(
+  "/:id",
+  authGuard,
+  requirePermissionOrPersonalWorkspace("applications.view"),
+  getApplicationById
+);
 
 /**
  * @route   GET /applications/:id/documents

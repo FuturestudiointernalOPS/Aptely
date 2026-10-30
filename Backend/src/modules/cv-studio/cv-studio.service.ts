@@ -91,9 +91,11 @@ async function isLikelyCv(cvText: string, locale: string): Promise<boolean> {
 // ─── PDF to Image ───────────────────────────────────────────────────────────
 
 async function renderPdfPage1(buffer: Buffer): Promise<Buffer | null> {
+  let document: Awaited<ReturnType<(typeof import("pdf-to-img"))["pdf"]>> | null = null;
   try {
     const { pdf } = await import("pdf-to-img");
-    const document = await pdf(buffer, { scale: 2 });
+    // scale 1 keeps the preview readable without a multi-megapixel canvas.
+    document = await pdf(buffer, { scale: 1 });
     for await (const image of document) {
       return Buffer.from(image);
     }
@@ -102,6 +104,8 @@ async function renderPdfPage1(buffer: Buffer): Promise<Buffer | null> {
   } catch (err) {
     log.error({ err }, "PDF to image error");
     return null;
+  } finally {
+    await document?.destroy().catch(() => undefined);
   }
 }
 

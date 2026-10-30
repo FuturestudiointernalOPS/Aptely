@@ -12,6 +12,18 @@ const router = Router();
 router.use(authGuard, requirePermission("applications.view"));
 
 /**
+ * @route   POST /match  (and GET)
+ * @desc    Hint for clients that hit the wrong path (INV-019)
+ * @access  HR
+ */
+router.all("/", (_req, res) => {
+  res.status(404).json({
+    error: "Not found. Use POST /match/role with body { roleId }.",
+    path: "/match/role",
+  });
+});
+
+/**
  * @route   POST /match/role
  * @desc    Run the AI matching engine for a role
  *          Returns ranked candidates with scores and AI explanations

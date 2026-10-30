@@ -5,6 +5,7 @@ import { asyncHandler } from "@/utils/helpers";
 import { paginate } from "@/utils/helpers";
 import type { AuthenticatedRequest } from "@/middleware/auth.middleware";
 import type { ListUsersQuery, ListInstitutionsQuery } from "./admin.schema";
+import { deriveRoleFieldsFromFullForm } from "@/modules/roles/role-form.mapper";
 
 // ─── GET /admin/stats ─────────────────────────────────────────────────────────
 
@@ -431,7 +432,8 @@ export const getActivity = asyncHandler(
         .limit(15),
       supabaseAdmin
         .from("roles")
-        .select("id, title, created_at")
+        // title lives in role_dna.full_form_json since migration 021 (JSON-only roles)
+        .select("id, created_at, role_dna(full_form_json)")
         .gte("created_at", since7d)
         .order("created_at", { ascending: false })
         .limit(15),
@@ -458,11 +460,17 @@ export const getActivity = asyncHandler(
         label: (u.full_name as string | null) ?? (u.email as string),
         at: u.created_at as string,
       })),
-      ...(jobsRes.data ?? []).map((j) => ({
-        type: "job_posted",
-        label: j.title as string,
-        at: j.created_at as string,
-      })),
+      ...(jobsRes.data ?? []).map((j) => {
+        const roleDna = Array.isArray(j.role_dna) ? j.role_dna[0] : j.role_dna;
+        const fullForm = (roleDna as { full_form_json?: Record<string, unknown> } | null)
+          ?.full_form_json;
+        const derived = deriveRoleFieldsFromFullForm(fullForm);
+        return {
+          type: "job_posted",
+          label: derived.title,
+          at: j.created_at as string,
+        };
+      }),
       ...(appsRes.data ?? []).map((a) => ({
         type: "application",
         // Neutral label — front localizes via type; keep id fragment for uniqueness
@@ -498,13 +506,14 @@ export const getInstitutionById = asyncHandler(
         .from("institution_members")
         .select("user_id, role_specialization, status, joined_at")
         .eq("institution_id", id),
-      // Recruitment fiches de poste (= roles), not org-chart job_positions
+      // Recruitment fiches de poste (= roles), not org-chart job_positions.
+      // title is in role_dna.full_form_json (roles.title dropped in migration 021).
       supabaseAdmin
         .from("roles")
-        .select("id, title, status, created_at")
+        .select("id, status, created_at, role_dna(full_form_json)")
         .eq("institution_id", id)
         .order("created_at", { ascending: false })
-        .limit(10),
+        .limit(50),
     ]);
 
     if (!instRes.data) throw new AppError(404, "Institution not found");
@@ -514,10 +523,23 @@ export const getInstitutionById = asyncHandler(
       throw new AppError(500, `Failed to fetch roles: ${jobsRes.error.message}`);
     }
 
+    const jobPositions = (jobsRes.data ?? []).map((row) => {
+      const roleDna = Array.isArray(row.role_dna) ? row.role_dna[0] : row.role_dna;
+      const fullForm = (roleDna as { full_form_json?: Record<string, unknown> } | null)
+        ?.full_form_json;
+      const derived = deriveRoleFieldsFromFullForm(fullForm);
+      return {
+        id: row.id as string,
+        title: derived.title,
+        status: row.status as string,
+        created_at: row.created_at as string,
+      };
+    });
+
     res.status(200).json({
       institution: instRes.data,
       members: membersRes.data ?? [],
-      jobPositions: jobsRes.data ?? [],
+      jobPositions,
     });
   }
 );
