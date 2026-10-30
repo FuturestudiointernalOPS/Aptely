@@ -32,6 +32,7 @@ export const getDashboardStats = asyncHandler(
       { count: validatedApplications },
       { count: rejectedApplications },
       { count: activeHRMembers },
+      { count: pendingAccessRequests },
     ] = await Promise.all([
       supabaseAdmin.from("applications").select("id", { count: "exact", head: true }).in("role_id", safeRoleIds),
       supabaseAdmin.from("applications").select("id", { count: "exact", head: true }).in("role_id", safeRoleIds).eq("status", "PENDING"),
@@ -39,6 +40,7 @@ export const getDashboardStats = asyncHandler(
       supabaseAdmin.from("applications").select("id", { count: "exact", head: true }).in("role_id", safeRoleIds).eq("status", "VALIDATED"),
       supabaseAdmin.from("applications").select("id", { count: "exact", head: true }).in("role_id", safeRoleIds).eq("status", "REJECTED"),
       supabaseAdmin.from("institution_members").select("id", { count: "exact", head: true }).eq("institution_id", institutionId).in("status", ["OWNER", "ADMIN", "ACTIVE"]),
+      supabaseAdmin.from("institution_members").select("id", { count: "exact", head: true }).eq("institution_id", institutionId).eq("status", "PENDING"),
     ]);
 
     // Open roles that have not received a single application yet (all of them, not only the latest).
@@ -62,6 +64,7 @@ export const getDashboardStats = asyncHandler(
       validatedApplications: validatedApplications ?? 0,
       rejectedApplications: rejectedApplications ?? 0,
       activeHRMembers: activeHRMembers ?? 0,
+      pendingAccessRequests: pendingAccessRequests ?? 0,
     });
   }
 );
