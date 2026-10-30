@@ -1,12 +1,12 @@
 import crypto from "crypto";
 import { Request, Response } from "express";
-import { Resend } from "resend";
 import { supabaseAdmin, createUserClient } from "@/config/supabase";
 import { STORAGE_BUCKETS, buildAvatarPath } from "@/services/storage.service";
 import { env } from "@/config/env";
 import { AppError } from "@/middleware/error.middleware";
 import { asyncHandler } from "@/utils/helpers";
 import { retryWithBackoff } from "@/utils/retry";
+import { sendEmailDirect } from "@/services/email.service";
 import type {
   RegisterInput,
   RequestOtpInput,
@@ -17,8 +17,6 @@ import type {
   DeleteMyAccountInput,
 } from "./auth.schema";
 import { type AuthenticatedRequest } from "@/middleware/auth.middleware";
-
-const resend = new Resend(env.RESEND_API_KEY);
 
 function hashOtp(code: string, salt: string): string {
   return crypto.createHash("sha256").update(`${salt}:${code}`).digest("hex");
@@ -174,17 +172,10 @@ export const requestSignupOtp = asyncHandler(async (req: Request, res: Response)
     ? `Someone tried to sign up with this email address. You already have an Aptely account — sign in, or reset your password if you've forgotten it.`
     : `Your Aptely verification code: ${code}\n\nExpires in 10 minutes.`;
 
-  const { error: resendError } = await resend.emails.send({
-    from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
-    to: email,
-    subject,
-    html,
-    text,
-  });
-
-  if (resendError) {
-    console.error("[AUTH] Failed to send OTP email via Resend:", resendError);
-    throw new AppError(500, `Failed to send verification email: ${resendError.message}`);
+  const delivered = await sendEmailDirect(email, subject, html, text);
+  if (!delivered.success) {
+    console.error("[AUTH] Failed to send OTP email:", delivered.error);
+    throw new AppError(500, `Failed to send verification email: ${delivered.error}`);
   }
 
   // Uniform response — reveals nothing about whether the address is registered.
@@ -606,14 +597,8 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response): 
   const resetLink = linkData.properties.action_link;
   const userName = linkData.user?.user_metadata?.full_name || email.split("@")[0];
 
-  // Send via Resend — works with all domains (@custom-domain, @gmail, etc.)
-  const resend = new Resend(env.RESEND_API_KEY);
-
-  const { error: emailError } = await resend.emails.send({
-    from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
-    to: email,
-    subject: "Réinitialisation de votre mot de passe Aptely",
-    html: `
+  const subject = "Réinitialisation de votre mot de passe Aptely";
+  const html = `
       <div style="background:#0f1117;padding:32px 0;font-family:sans-serif;">
         <div style="max-width:520px;margin:0 auto;background:#1a1d2e;border-radius:12px;padding:40px;color:#f0f0f0;">
           <div style="text-align:center;margin-bottom:28px;">
@@ -638,12 +623,12 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response): 
           </p>
         </div>
       </div>
-    `,
-    text: `Réinitialisation du mot de passe Aptely\n\nBonjour ${userName},\n\nCliquez sur ce lien pour réinitialiser votre mot de passe :\n${resetLink}\n\nCe lien expire dans 24 heures.\n\nSi vous n'avez pas demandé cette réinitialisation, ignorez cet email.`,
-  });
+    `;
+  const text = `Réinitialisation du mot de passe Aptely\n\nBonjour ${userName},\n\nCliquez sur ce lien pour réinitialiser votre mot de passe :\n${resetLink}\n\nCe lien expire dans 24 heures.\n\nSi vous n'avez pas demandé cette réinitialisation, ignorez cet email.`;
 
-  if (emailError) {
-    console.error("[AUTH][forgotPassword] Resend error:", emailError.message);
+  const delivered = await sendEmailDirect(email, subject, html, text);
+  if (!delivered.success) {
+    console.error("[AUTH][forgotPassword] email error:", delivered.error);
     // Still return 200 — don't leak whether email exists
   }
 
