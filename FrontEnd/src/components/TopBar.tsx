@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronRight, Menu, MessageSquare, Search } from "lucide-react";
+import { ArrowLeft, ChevronRight, Menu, MessageSquare, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
 import {
@@ -198,6 +198,17 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
                         .filter(Boolean)
                         .map((segment) => mapPathSegment(segment, currentLocale));
 
+    // Landing pages have nowhere to go back to; every other page gets a back arrow.
+    const homeRoute = active.kind === "institution" ? ROUTES.company.dashboard : ROUTES.candidate.dashboard;
+    const showBack =
+        pathnameWithoutLocale !== ROUTES.company.dashboard &&
+        pathnameWithoutLocale !== ROUTES.candidate.dashboard;
+    // Back to the previous page (e.g. the dashboard after a link); to the home page when opened directly.
+    const goBack = () => {
+        if (window.history.length > 1) router.back();
+        else router.push(localizePath(homeRoute, currentLocale));
+    };
+
     const filteredQuickRoutes = useMemo(() => {
         if (!query.trim()) return quickRoutes;
         const term = query.trim().toLowerCase();
@@ -230,6 +241,17 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
                     >
                         <Menu size={18} />
                     </button>
+                    {showBack && (
+                        <button
+                            type="button"
+                            onClick={goBack}
+                            className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-[var(--bg-raised)] transition-colors"
+                            aria-label={translate("common.back", "Back")}
+                            title={translate("common.back", "Back")}
+                        >
+                            <ArrowLeft size={18} />
+                        </button>
+                    )}
                     {/* Mobile: show current page name */}
                     <span className="sm:hidden text-sm font-semibold text-[var(--text-primary)] truncate max-w-[160px]">
                         {crumbs[crumbs.length - 1]}
