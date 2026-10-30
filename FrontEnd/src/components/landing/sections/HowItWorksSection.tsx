@@ -187,14 +187,13 @@ function MockDecision({ active }: { active: boolean }) {
         animate={active ? { scale: 1, opacity: 1 } : { scale: 0.9, opacity: 0 }}
         transition={{ delay: 0.55, type: "spring", stiffness: 180 }}
       >
-        <motion.button
-          animate={active ? { boxShadow: ["0 4px 20px rgba(255,107,0,0.2)", "0 8px 40px rgba(255,107,0,0.4)", "0 4px 20px rgba(255,107,0,0.2)"] } : {}}
-          transition={{ repeat: Infinity, duration: 2 }}
-          className="w-full bg-[var(--accent)] text-white py-3 rounded-xl text-sm font-semibold font-sans flex items-center justify-center gap-2"
+        <button
+          type="button"
+          className="w-full bg-[var(--accent)] text-white py-3 rounded-xl text-sm font-semibold font-sans flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(255,107,0,0.25)]"
         >
           <CheckCircle2 size={15} />
           {t(locale, "hiw.mock.decision.cta", "Make an offer")}
-        </motion.button>
+        </button>
       </motion.div>
     </div>
   );

@@ -60,11 +60,12 @@ const ROLE_COLORS: Record<string, string> = {
   RECRUITER:      "text-[var(--info)] bg-[var(--info-bg)]",
 };
 
+// role_status enum: ACTIVE | DRAFT | CLOSED | CANCELLED (not PUBLISHED)
 const JOB_STATUS_COLORS: Record<string, string> = {
-  PUBLISHED: "text-[var(--success)]",
+  ACTIVE:    "text-[var(--success)]",
   DRAFT:     "text-[var(--warning)]",
   CLOSED:    "text-[var(--text-muted)]",
-  ARCHIVED:  "text-[var(--text-muted)]",
+  CANCELLED: "text-[var(--text-muted)]",
 };
 
 function dateLocale(locale: string) {
@@ -86,7 +87,7 @@ function InstitutionDrawer({ instId, onClose }: { instId: string; onClose: () =>
   }, [instId]);
 
   const activeMembers  = detail?.members.filter(m => m.status === "ACTIVE").length ?? 0;
-  const openJobs       = detail?.jobPositions.filter(j => j.status === "PUBLISHED").length ?? 0;
+  const openJobs       = detail?.jobPositions.filter(j => j.status === "ACTIVE").length ?? 0;
 
   return (
     <>

@@ -91,7 +91,7 @@ const PERMISSION_GROUPS: Array<{
   },
   {
     groupKey: "perm.group.employees",
-    groupFallback: "Employés (à venir)",
+    groupFallback: "Employés",
     perms: [
       { key: "employees.view", fallback: "Voir les employés" },
       { key: "employees.manage", fallback: "Gérer les employés" },
@@ -99,7 +99,7 @@ const PERMISSION_GROUPS: Array<{
   },
   {
     groupKey: "perm.group.payroll",
-    groupFallback: "Paie (à venir)",
+    groupFallback: "Paie",
     perms: [
       { key: "payroll.view", fallback: "Voir la paie" },
       { key: "payroll.manage", fallback: "Gérer la paie" },

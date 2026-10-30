@@ -197,8 +197,8 @@ export default function CapabilityMappingPage() {
                     </div>
                 </div>
                 {/* Decorative background blobs */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent)]/20 blur-[100px] -mr-32 -mt-32 rounded-full"></div>
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-400/100/10 blur-[100px] -ml-32 -mb-32 rounded-full"></div>
+                <div className="absolute top-0 right-0 w-40 h-40 bg-[var(--accent)]/20 blur-2xl -mr-20 -mt-20 rounded-full pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-40 h-40 bg-blue-400/10 blur-2xl -ml-20 -mb-20 rounded-full pointer-events-none"></div>
             </div>
 
             {/* Score Breakdown Grid */}

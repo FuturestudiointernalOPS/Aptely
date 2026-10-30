@@ -58,17 +58,62 @@ export default function HRMessagesPage() {
     void init();
   }, [loading, user, id, router, loadMessages]);
 
-  // Realtime
+  // Realtime with REST poll fallback (avoids Next overlay when WebSocket is unavailable)
   useEffect(() => {
     if (!user?.token) return;
-    supabase.auth.setSession({ access_token: user.token, refresh_token: "" }).catch(() => {});
-    const channel = supabase
-      .channel(`hr-messages:${id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => {
+
+    let pollId: ReturnType<typeof setInterval> | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const startPoll = () => {
+      if (pollId) return;
+      pollId = setInterval(() => {
         void loadMessages();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      }, 8_000);
+    };
+
+    const cleanup = () => {
+      if (channel) {
+        void supabase.removeChannel(channel);
+        channel = null;
+      }
+      if (pollId) {
+        clearInterval(pollId);
+        pollId = null;
+      }
+    };
+
+    if (typeof WebSocket === "undefined") {
+      console.warn("[hr-messages] WebSocket unavailable — polling");
+      startPoll();
+      return cleanup;
+    }
+
+    try {
+      void supabase.auth
+        .setSession({ access_token: user.token, refresh_token: "" })
+        .catch(() => {});
+      channel = supabase
+        .channel(`hr-messages:${id}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "messages" },
+          () => {
+            void loadMessages();
+          },
+        );
+      channel.subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn("[hr-messages] Realtime failed — polling", err ?? status);
+          startPoll();
+        }
+      });
+    } catch (err) {
+      console.warn("[hr-messages] Realtime subscribe failed — polling", err);
+      startPoll();
+    }
+
+    return cleanup;
   }, [id, user?.token, loadMessages]);
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);

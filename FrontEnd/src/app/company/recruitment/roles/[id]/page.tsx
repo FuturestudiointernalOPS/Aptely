@@ -276,12 +276,22 @@ export default function RoleApplicationsPage() {
     const loadMore = useCallback(async () => {
         if (loadingMore || !hasMore) return;
         setLoadingMore(true);
-        const nextPage = page + 1;
-        const res = await getApplicationsByRole(id, nextPage, PER_PAGE);
-        setApplications(prev => [...prev, ...res.data]);
-        setPage(nextPage);
-        setHasMore(applications.length + res.data.length < totalApps);
-        setLoadingMore(false);
+        try {
+            const nextPage = page + 1;
+            const res = await getApplicationsByRole(id, nextPage, PER_PAGE);
+            const batch = res.data ?? [];
+            // An empty page with a stale total would otherwise keep the sentinel
+            // intersecting and refetch forever.
+            if (batch.length === 0) {
+                setHasMore(false);
+                return;
+            }
+            setApplications(prev => [...prev, ...batch]);
+            setPage(nextPage);
+            setHasMore(applications.length + batch.length < totalApps);
+        } finally {
+            setLoadingMore(false);
+        }
     }, [loadingMore, hasMore, page, id, applications.length, totalApps]);
 
     // Infinite scroll: auto-load when the "load more" sentinel is visible
@@ -557,7 +567,7 @@ export default function RoleApplicationsPage() {
 
             {/* Role Header */}
             <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-[2rem] p-4 sm:p-6 md:p-8 lg:p-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent)]/[0.06] blur-[80px] -mr-32 -mt-32 rounded-full pointer-events-none" />
+                <div className="absolute top-0 right-0 w-40 h-40 bg-[var(--accent)]/[0.06] blur-2xl -mr-20 -mt-20 rounded-full pointer-events-none" />
                 
                 <div className="space-y-4 relative z-10">
                     <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[var(--text-primary)] tracking-tight">

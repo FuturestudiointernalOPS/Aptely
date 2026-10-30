@@ -28,8 +28,21 @@ import {
   individualsMeApi,
   individualsUploadCvApi,
   individualsDeleteCvApi,
+  vaultMyScoreApi,
 } from "@/lib/routes";
 import { AvatarUploader } from "@/components/ui/AvatarUploader";
+
+/** Maps vault nudge i18n keys → in-page anchors (or Vault for proof/endorsement). */
+const NUDGE_HREF: Record<string, string> = {
+  "individual.profile.nudge.headline": "#bio",
+  "individual.profile.nudge.bio": "#bio",
+  "individual.profile.nudge.skills": "#skills",
+  "individual.profile.nudge.experience": "#experience",
+  "individual.profile.nudge.skill_proofs": ROUTES.candidate.vault,
+  "individual.profile.nudge.endorsements": ROUTES.candidate.vault,
+  "individual.profile.nudge.links": "#links",
+  "individual.profile.nudge.location": "#bio",
+};
 
 type Availability = "IMMEDIATE" | "ONE_MONTH" | "THREE_MONTHS" | "NOT_LOOKING";
 type SkillLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";
@@ -143,85 +156,9 @@ const AVAILABILITIES: Availability[] = [
   "NOT_LOOKING",
 ];
 
-interface ProfileScore {
+interface VaultScoreUi {
   score: number;
-  nudges: Array<{ key: string; fallback: string; href: string }>;
-}
-
-function computeProfileScore(profile: IndividualProfile): ProfileScore {
-  const nudges: ProfileScore["nudges"] = [];
-  let score = 0;
-
-  if (profile.bio && profile.bio.trim().length >= 30) score += 20;
-  else
-    nudges.push({
-      key: "individual.profile.nudge.bio",
-      fallback: "Ajoutez une bio (30 caractères min.)",
-      href: "#bio",
-    });
-
-  if (profile.headline && profile.headline.trim().length > 0) score += 10;
-  else
-    nudges.push({
-      key: "individual.profile.nudge.headline",
-      fallback: "Ajoutez un titre professionnel",
-      href: "#bio",
-    });
-
-  if (profile.skills.filter((s) => s.name.trim()).length >= 3) score += 20;
-  else
-    nudges.push({
-      key: "individual.profile.nudge.skills",
-      fallback: "Ajoutez au moins 3 compétences",
-      href: "#skills",
-    });
-
-  if (
-    profile.experience.filter((e) => e.title.trim() && e.company.trim())
-      .length >= 1
-  )
-    score += 20;
-  else
-    nudges.push({
-      key: "individual.profile.nudge.experience",
-      fallback: "Ajoutez au moins 1 expérience",
-      href: "#experience",
-    });
-
-  if (
-    profile.education.filter((e) => e.degree.trim() && e.institution.trim())
-      .length >= 1
-  )
-    score += 15;
-  else
-    nudges.push({
-      key: "individual.profile.nudge.education",
-      fallback: "Ajoutez au moins 1 formation",
-      href: "#education",
-    });
-
-  const hasLinks = !!(
-    profile.linkedin_url ||
-    profile.github_url ||
-    profile.website_url
-  );
-  if (hasLinks) score += 10;
-  else
-    nudges.push({
-      key: "individual.profile.nudge.links",
-      fallback: "Ajoutez LinkedIn, GitHub ou site web",
-      href: "#links",
-    });
-
-  if (profile.location && profile.location.trim().length > 0) score += 5;
-  else
-    nudges.push({
-      key: "individual.profile.nudge.location",
-      fallback: "Ajoutez votre localisation",
-      href: "#bio",
-    });
-
-  return { score, nudges: nudges.slice(0, 3) };
+  nudges: string[];
 }
 
 function SectionHeader({ title, onAdd }: { title: string; onAdd: () => void }) {
@@ -302,6 +239,21 @@ export default function IndividualProfilePage() {
     certifications: [],
     languages: [],
   });
+  // Single source of truth with dashboard — GET /vault/me/score
+  const [vaultScore, setVaultScore] = useState<VaultScoreUi | null>(null);
+
+  const refreshVaultScore = async () => {
+    const scoreRes = await apiFetch(vaultMyScoreApi, "HR", {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (scoreRes && typeof scoreRes.score === "number") {
+      setVaultScore({
+        score: scoreRes.score,
+        nudges: Array.isArray(scoreRes.nudges) ? scoreRes.nudges : [],
+      });
+    }
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -316,10 +268,13 @@ export default function IndividualProfilePage() {
 
     const load = async () => {
       setFetching(true);
-      const res = await apiFetch(individualsMeApi, "HR", {
-        method: "GET",
-        cache: "no-store",
-      });
+      const [res] = await Promise.all([
+        apiFetch(individualsMeApi, "HR", {
+          method: "GET",
+          cache: "no-store",
+        }),
+        refreshVaultScore(),
+      ]);
       if (res && typeof res === "object" && !Array.isArray(res)) {
         setProfile({
           headline: res.headline ?? "",
@@ -388,6 +343,7 @@ export default function IndividualProfilePage() {
     if (res) {
       setSaved(true);
       if (skipped > 0) setSkippedCount(skipped);
+      void refreshVaultScore();
       setTimeout(() => {
         setSaved(false);
         setSkippedCount(0);
@@ -461,9 +417,9 @@ export default function IndividualProfilePage() {
           )}
         </div>
 
-        {/* Profile completeness */}
-        {(() => {
-          const { score, nudges } = computeProfileScore(profile);
+        {/* Profile completeness — same score as dashboard (GET /vault/me/score) */}
+        {vaultScore && (() => {
+          const { score, nudges } = vaultScore;
           const color =
             score >= 80
               ? "bg-emerald-400"
@@ -494,14 +450,14 @@ export default function IndividualProfilePage() {
               </div>
               {nudges.length > 0 && (
                 <ul className="space-y-1">
-                  {nudges.map((n) => (
-                    <li key={n.key}>
+                  {nudges.slice(0, 3).map((key) => (
+                    <li key={key}>
                       <a
-                        href={n.href}
+                        href={NUDGE_HREF[key] ?? ROUTES.candidate.vault}
                         className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
                       >
                         <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] shrink-0" />
-                        {t(locale, n.key, n.fallback)}
+                        {t(locale, key, key)}
                       </a>
                     </li>
                   ))}

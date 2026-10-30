@@ -10,12 +10,14 @@ import {
   LayoutDashboard,
   Users,
   Building2,
+  BarChart3,
   LogOut,
   ShieldAlert,
 } from "lucide-react";
 
 const navItems = [
   { href: ROUTES.admin.root,         labelKey: "admin.nav.overview",     labelFallback: "Vue d'ensemble", icon: LayoutDashboard },
+  { href: ROUTES.admin.metrics,      labelKey: "admin.nav.metrics",      labelFallback: "Métriques",      icon: BarChart3 },
   { href: ROUTES.admin.users,        labelKey: "admin.nav.users",        labelFallback: "Utilisateurs",   icon: Users },
   { href: ROUTES.admin.institutions, labelKey: "admin.nav.institutions", labelFallback: "Entreprises",    icon: Building2 },
 ];
