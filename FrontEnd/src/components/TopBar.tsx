@@ -5,6 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, ChevronRight, Menu, MessageSquare, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
+import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
+import { usePersona } from "@/lib/usePersona";
+import type { Persona } from "@/lib/persona";
 import {
     getClientLocale,
     localizePath,
@@ -23,6 +26,7 @@ import {
 } from "@/lib/routes";
 import { apiFetch } from "@/lib/apiHelper";
 import NotificationBell from "@/components/NotificationBell";
+import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 
 const LOCALE_OPTIONS: Locale[] = ["fr", "en"];
 
@@ -99,6 +103,7 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
     const router = useRouter();
     const { user } = useAuth();
     const { active, roleResolved } = useWorkspace();
+    const { persona } = usePersona();
     const [query, setQuery] = useState("");
     const membershipBadge = useMemo<"OWNER" | "ADMIN" | "MEMBER" | null>(() => {
         if (active.kind !== "institution" || !roleResolved) return null;
@@ -143,6 +148,15 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
         const rs = active.membership.role_specialization;
         const customLabel = active.membership.role_custom_label;
         if (customLabel) return customLabel;  // custom label for ANY role (incl. OWNER)
+        if (ROLE_PERSONAS_V1 && rs !== "CUSTOM") {
+            const personaLabels: Record<Persona, string> = {
+                OWNER: translate("persona.owner", "Owner"),
+                HR: translate("persona.hr", "RH"),
+                INTERVIEWER: translate("persona.interviewer", "Interviewer"),
+                EMPLOYEE: translate("persona.employee", "Employé"),
+            };
+            return personaLabels[persona];
+        }
         const map: Record<string, string> = {
             OWNER: translate("perm.role.owner", "Propriétaire"),
             ADMIN: translate("perm.role.admin", "Administrateur"),
@@ -154,7 +168,7 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
         };
         if (rs && map[rs]) return map[rs];
         return membershipBadge;
-    }, [active, translate, membershipBadge, roleResolved]);
+    }, [active, translate, membershipBadge, roleResolved, persona]);
 
     const pathnameWithoutLocale = useMemo(() => removeLocalePrefix(pathname), [pathname]);
 
@@ -162,15 +176,18 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
         () => {
             const isInstitution = active.kind === "institution";
             if (isInstitution) {
-                return [
+                const routes: Array<{ label: string; href: string; personas?: Persona[] }> = [
                     { label: translate("nav.dashboard", "Dashboard"), href: localizePath(ROUTES.company.dashboard, currentLocale) },
-                    { label: translate("nav.applications", "Applications"), href: localizePath(ROUTES.company.recruitment.applications, currentLocale) },
-                    { label: translate("nav.interviews", "Interviews"), href: localizePath(ROUTES.company.recruitment.interviews, currentLocale) },
-                    { label: translate("nav.roles", "Job Post Sheets"), href: localizePath(ROUTES.company.recruitment.roles, currentLocale) },
-                    { label: translate("nav.team", "Team"), href: localizePath(ROUTES.company.settings.hr, currentLocale) },
-                    { label: translate("nav.permissions", "Permissions"), href: localizePath(ROUTES.company.settings.permissions, currentLocale) },
+                    { label: translate("nav.applications", "Applications"), href: localizePath(ROUTES.company.recruitment.applications, currentLocale), personas: ["OWNER", "HR"] },
+                    { label: translate("nav.interviews", "Interviews"), href: localizePath(ROUTES.company.recruitment.interviews, currentLocale), personas: ["OWNER", "HR", "INTERVIEWER"] },
+                    { label: translate("nav.roles", "Job Post Sheets"), href: localizePath(ROUTES.company.recruitment.roles, currentLocale), personas: ["OWNER", "HR"] },
+                    { label: translate("nav.team", "Team"), href: localizePath(ROUTES.company.settings.hr, currentLocale), personas: ["OWNER", "HR"] },
+                    { label: translate("nav.permissions", "Permissions"), href: localizePath(ROUTES.company.settings.permissions, currentLocale), personas: ["OWNER"] },
                     { label: translate("nav.settings", "Settings"), href: localizePath(ROUTES.company.settings.settings, currentLocale) },
                 ];
+                return ROLE_PERSONAS_V1
+                    ? routes.filter((route) => !route.personas || route.personas.includes(persona))
+                    : routes;
             }
             return [
                 { label: translate("nav.dashboard", "Dashboard"), href: localizePath(ROUTES.candidate.dashboard, currentLocale) },
@@ -181,7 +198,7 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
                 { label: translate("nav.settings", "Settings"), href: localizePath(ROUTES.candidate.settings, currentLocale) },
             ];
         },
-        [currentLocale, translate, active.kind]
+        [currentLocale, translate, active.kind, persona]
     );
 
     const crumbs = pathnameWithoutLocale.startsWith(rolesSubPathPrefix)
@@ -300,6 +317,9 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
                         )}
                     </form>
 
+                    {/* Workspace switcher — only when the flag is on and there are 2+ institutions */}
+                    <WorkspaceSwitcher />
+
                     {/* Notification bell (all users) */}
                     <NotificationBell />
 
@@ -352,11 +372,19 @@ export default function TopBar({ isMobileOpen, setIsMobileOpen }: TopBarProps) {
                     >
                         {membershipBadge && (
                             <span aria-hidden="true" className={`hidden sm:inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
-                                membershipBadge === "OWNER"
+                                ROLE_PERSONAS_V1 && persona === "OWNER"
                                     ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-400"
-                                    : membershipBadge === "ADMIN"
+                                    : ROLE_PERSONAS_V1 && persona === "HR"
                                         ? "border-amber-400/40 bg-amber-400/10 text-amber-400"
-                                        : "border-sky-400/40 bg-sky-400/10 text-sky-400"
+                                        : ROLE_PERSONAS_V1 && persona === "INTERVIEWER"
+                                            ? "border-sky-400/40 bg-sky-400/10 text-sky-400"
+                                            : ROLE_PERSONAS_V1
+                                                ? "border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-muted)]"
+                                                : membershipBadge === "OWNER"
+                                                    ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-400"
+                                                    : membershipBadge === "ADMIN"
+                                                        ? "border-amber-400/40 bg-amber-400/10 text-amber-400"
+                                                        : "border-sky-400/40 bg-sky-400/10 text-sky-400"
                             }`}>
                                 {membershipLabel}
                             </span>

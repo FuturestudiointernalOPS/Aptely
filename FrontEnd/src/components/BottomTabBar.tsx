@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWorkspace } from "@/lib/workspace";
+import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
+import { usePersona } from "@/lib/usePersona";
 import { getClientLocale, localizePath, removeLocalePrefix, t } from "@/lib/i18n";
 import {
     LayoutDashboard,
@@ -23,7 +25,8 @@ type Tab = { name: string; baseHref: string; href: string; icon: React.ElementTy
 
 export default function BottomTabBar({ setIsMobileOpen }: BottomTabBarProps) {
     const pathname = usePathname() ?? "";
-    const { isPersonal, active } = useWorkspace();
+    const { isPersonal, active, hasPermission } = useWorkspace();
+    const { persona } = usePersona();
     const locale = getClientLocale(pathname);
     const tr = (key: string, fallback: string) => t(locale, key, fallback);
     const pathNoLocale = removeLocalePrefix(pathname);
@@ -35,6 +38,18 @@ export default function BottomTabBar({ setIsMobileOpen }: BottomTabBarProps) {
     const effectiveRole = wsRole ?? (wsStatus === "OWNER" ? "OWNER" : wsStatus === "ADMIN" ? "ADMIN" : "MEMBER");
     const HR_FAMILY = ["OWNER", "ADMIN", "HR_LEAD", "STANDARD_HR", "RECRUITER", "HIRING_MANAGER"];
     const isHrFamily = HR_FAMILY.includes(effectiveRole);
+    const isCustom = effectiveRole === "CUSTOM";
+    // CUSTOM roles keep permission gating; built-ins use personas when the flag is on.
+    const showApplications = isCustom
+        ? hasPermission("applications.view")
+        : ROLE_PERSONAS_V1
+            ? persona === "OWNER" || persona === "HR"
+            : isHrFamily;
+    const showInterviews = isCustom
+        ? hasPermission("interviews.manage")
+        : ROLE_PERSONAS_V1
+            ? persona === "OWNER" || persona === "HR" || persona === "INTERVIEWER"
+            : isHrFamily;
 
     const tabs: Tab[] = isPersonal
         ? [
@@ -44,8 +59,10 @@ export default function BottomTabBar({ setIsMobileOpen }: BottomTabBarProps) {
         ]
         : [
             { name: tr("nav.dashboard", "Accueil"), baseHref: ROUTES.company.dashboard, href: localizePath(ROUTES.company.dashboard, locale), icon: LayoutDashboard },
-            ...(isHrFamily ? [
+            ...(showApplications ? [
                 { name: tr("nav.applications", "Candidatures"), baseHref: ROUTES.company.recruitment.applications, href: localizePath(ROUTES.company.recruitment.applications, locale), icon: Users },
+            ] : []),
+            ...(showInterviews ? [
                 { name: tr("nav.interviews", "Entretiens"), baseHref: ROUTES.company.recruitment.interviews, href: localizePath(ROUTES.company.recruitment.interviews, locale), icon: CalendarRange },
             ] : []),
             { name: tr("nav.calendar", "Agenda"), baseHref: ROUTES.company.calendar, href: localizePath(ROUTES.company.calendar, locale), icon: CalendarDays },

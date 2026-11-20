@@ -1,6 +1,8 @@
 import { cookies, headers } from "next/headers";
 import { unstable_cache } from "next/cache";
 import type { Activity, DashboardStats, Role } from "./api";
+import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
+import type { PersonaProfile } from "@/lib/persona";
 import { applyPath } from "@/lib/routes";
 
 export type RecentApplicationServerItem = {
@@ -204,6 +206,22 @@ export async function getMyPermissionsServer(): Promise<MyPermissionsServer> {
   const token = cookieStore.get("hr_access_token")?.value;
   if (!token) return { permissions: [], roleSpecialization: null, membershipStatus: null };
   return getCachedPermissions(token, cookieStore.get(WORKSPACE_COOKIE)?.value ?? null);
+}
+
+/**
+ * Piste B — persona profile from Piste A's `/institution/me/profile`.
+ * Never called when the flag is off; a missing endpoint (404 until merge) returns null
+ * and the dashboard falls back to the local role mapping.
+ */
+export async function getMyProfileServer(): Promise<PersonaProfile | null> {
+  if (!ROLE_PERSONAS_V1) return null;
+  const payload = await serverApiFetch<PersonaProfile>("/institution/me/profile");
+  if (!payload || typeof payload !== "object") return null;
+  const hasPersona = typeof (payload as PersonaProfile).persona === "string";
+  const hasRole =
+    typeof (payload as PersonaProfile).roleSpecialization === "string" ||
+    typeof (payload as PersonaProfile).role_specialization === "string";
+  return hasPersona || hasRole ? payload : null;
 }
 
 export async function getRecentRolesServer(limit = 5): Promise<Role[]> {

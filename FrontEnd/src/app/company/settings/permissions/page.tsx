@@ -27,6 +27,9 @@ import {
 } from "@/lib/api";
 import { useAuth, useRequireInstitution } from "@/lib/auth";
 import { roleRank, useWorkspace } from "@/lib/workspace";
+import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
+import { usePersona } from "@/lib/usePersona";
+import { PERMISSION_GROUPS } from "@/lib/permissionCatalogue";
 import { getClientLocale, t } from "@/lib/i18n";
 import { ROUTES } from "@/lib/routes";
 import Modal from "@/components/ui/Modal";
@@ -51,62 +54,6 @@ const ROLE_LABELS: Record<string, { key: string; fallback: string }> = {
   MEMBER: { key: "perm.role.member", fallback: "Membre" },
 };
 
-const PERMISSION_GROUPS: Array<{
-  groupKey: string;
-  groupFallback: string;
-  perms: Array<{ key: string; fallback: string }>;
-}> = [
-  {
-    groupKey: "perm.group.recruitment",
-    groupFallback: "Recrutement",
-    perms: [
-      { key: "applications.view", fallback: "Voir les candidatures" },
-      { key: "applications.decide", fallback: "Décider (accepter / refuser)" },
-      { key: "interviews.manage", fallback: "Gérer les entretiens" },
-      { key: "offers.manage", fallback: "Gérer les offres" },
-      { key: "onboarding.manage", fallback: "Gérer l'onboarding" },
-      { key: "communications.send", fallback: "Envoyer des communications" },
-      { key: "analytics.view", fallback: "Voir les analyses" },
-      { key: "roles.create", fallback: "Créer des fiches de poste" },
-      { key: "roles.update", fallback: "Modifier des fiches de poste" },
-      { key: "roles.delete", fallback: "Supprimer des fiches de poste" },
-    ],
-  },
-  {
-    groupKey: "perm.group.team",
-    groupFallback: "Équipe & membres",
-    perms: [
-      { key: "members.view", fallback: "Voir les membres" },
-      { key: "members.invite", fallback: "Inviter des membres" },
-      { key: "members.remove", fallback: "Retirer / suspendre des membres" },
-      { key: "members.roles", fallback: "Gérer les rôles & permissions" },
-    ],
-  },
-  {
-    groupKey: "perm.group.settings",
-    groupFallback: "Paramètres",
-    perms: [
-      { key: "settings.edit", fallback: "Modifier les paramètres de l'institution" },
-    ],
-  },
-  {
-    groupKey: "perm.group.employees",
-    groupFallback: "Employés",
-    perms: [
-      { key: "employees.view", fallback: "Voir les employés" },
-      { key: "employees.manage", fallback: "Gérer les employés" },
-    ],
-  },
-  {
-    groupKey: "perm.group.payroll",
-    groupFallback: "Paie",
-    perms: [
-      { key: "payroll.view", fallback: "Voir la paie" },
-      { key: "payroll.manage", fallback: "Gérer la paie" },
-    ],
-  },
-];
-
 function roleFromStatus(status: string | null): MatrixRole {
   if (status === "OWNER") return "OWNER";
   if (status === "ADMIN") return "ADMIN";
@@ -128,7 +75,8 @@ function getStatusLabel(status: string, translate: (k: string, f: string) => str
 export default function PermissionsMatrixPage() {
   useRequireInstitution();
   const { user } = useAuth();
-  const { hasPermission } = useWorkspace();
+  const { active, hasPermission } = useWorkspace();
+  const { persona } = usePersona();
   const router = useRouter();
   const locale = getClientLocale();
   const translate = (key: string, fallback: string) => t(locale, key, fallback);
@@ -164,8 +112,13 @@ export default function PermissionsMatrixPage() {
       ? translate(ROLE_LABELS[currentMember.roleSpecialization].key, ROLE_LABELS[currentMember.roleSpecialization].fallback)
       : getStatusLabel(currentRole, translate));
 
+  // B4 — with personas on, the matrix is Owner-only. CUSTOM roles stay permission-gated.
+  const isCustomActor =
+    active.kind === "institution" && active.membership.role_specialization === "CUSTOM";
+  const canOpenMatrix =
+    !ROLE_PERSONAS_V1 || persona === "OWNER" || (isCustomActor && hasPermission("members.roles"));
   // Editing the permission matrix requires members.roles (OWNER/ADMIN by default).
-  const canEditPermissions = hasPermission("members.roles");
+  const canEditPermissions = canOpenMatrix && hasPermission("members.roles");
 
   // Rank rule (mirrors the backend): only roles strictly below the actor's rank can be
   // configured — an ADMIN cannot rewrite the ADMIN role, i.e. its own permissions.
@@ -347,6 +300,8 @@ export default function PermissionsMatrixPage() {
         </div>
       )}
 
+      {canOpenMatrix ? (
+      <>
       <div className="bg-[var(--bg-surface)] border border-[var(--border)] p-4 sm:p-6 animate-fade-in-up delay-150">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
           <div>
@@ -403,12 +358,13 @@ export default function PermissionsMatrixPage() {
                         key={perm.key}
                         type="button"
                         onClick={() => togglePerm(selectedRole, perm.key)}
-                        disabled={!canEditRole(selectedRole)}
+                        disabled={perm.legacyAlias || !canEditRole(selectedRole)}
+                        title={perm.legacyAlias ? translate("perm.editor.legacyAlias", "Alias historique : expansé automatiquement en droits members.*, non persistant.") : undefined}
                         className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-left text-sm transition-colors ${
                           checked
                             ? "border-[var(--accent)]/30 bg-[var(--accent-dim)]"
                             : "border-[var(--border)] bg-[var(--bg-raised)]"
-                        } ${canEditRole(selectedRole) ? "hover:border-[var(--accent)]/40" : "opacity-80 cursor-not-allowed"}`}
+                        } ${canEditRole(selectedRole) && !perm.legacyAlias ? "hover:border-[var(--accent)]/40" : "opacity-80 cursor-not-allowed"}`}
                       >
                         <span className={checked ? "text-[var(--accent)] font-medium" : "text-[var(--text-secondary)]"}>
                           {translate(`perm.label.${perm.key}`, perm.fallback)}
@@ -532,9 +488,11 @@ export default function PermissionsMatrixPage() {
                           key={perm.key}
                           type="button"
                           onClick={() => toggleEditPerm(perm.key)}
-                          className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-left text-sm transition-colors hover:border-[var(--accent)]/40 ${
-                            checked ? "border-[var(--accent)]/30 bg-[var(--accent-dim)]" : "border-[var(--border)] bg-[var(--bg-surface)]"
-                          }`}
+                          disabled={perm.legacyAlias}
+                          title={perm.legacyAlias ? translate("perm.editor.legacyAlias", "Alias historique : expansé automatiquement en droits members.*, non persistant.") : undefined}
+                          className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-left text-sm transition-colors ${
+                            perm.legacyAlias ? "opacity-80 cursor-not-allowed" : "hover:border-[var(--accent)]/40"
+                          } ${checked ? "border-[var(--accent)]/30 bg-[var(--accent-dim)]" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}
                         >
                           <span className={checked ? "text-[var(--accent)] font-medium" : "text-[var(--text-secondary)]"}>
                             {translate(`perm.label.${perm.key}`, perm.fallback)}
@@ -615,6 +573,17 @@ export default function PermissionsMatrixPage() {
           </ul>
         )}
       </div>
+      </>
+      ) : (
+        <div className="bg-[var(--bg-surface)] border border-[var(--border)] p-5 animate-fade-in-up delay-150">
+          <h2 className="font-bold text-[var(--text-primary)]">
+            {translate("perm.ownerOnly.title", "Matrice réservée au propriétaire")}
+          </h2>
+          <p className="text-sm text-[var(--text-muted)] mt-1">
+            {translate("perm.ownerOnly.desc", "La matrice des permissions et les rôles personnalisés ne peuvent être consultés que par le propriétaire de l'espace.")}
+          </p>
+        </div>
+      )}
 
       <div className="bg-[var(--bg-surface)] border border-[var(--border)] p-4 sm:p-6 animate-fade-in-up delay-200">
         <h2 className="text-[var(--text-primary)] font-bold mb-1">

@@ -3,10 +3,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { persistActiveWorkspace } from "@/lib/apiHelper";
+import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
+import { readProfilePersona, type PersonaProfile } from "@/lib/persona";
 import {
-  API,
   institutionMembershipsApi,
   institutionMePermissionsApi,
+  institutionMeProfileApi,
   institutionMeModulesApi,
   institutionMeActiveApi,
 } from "@/lib/routes";
@@ -108,6 +110,8 @@ interface WorkspaceContextValue {
   roleResolved: boolean;
   permissions: Set<Permission>;
   hasPermission: (perm: Permission) => boolean;
+  /** Payload from /institution/me/profile when the flag is on and the API is available. */
+  profilePersona: PersonaProfile | null;
   activeModules: AppModule[];
   hasModule: (key: ModuleKey) => boolean;
   switchTo: (institutionId: string | null) => Promise<void>;
@@ -144,6 +148,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   });
   const [personalLabel, setPersonalLabel] = useState<string>("Individual");
   const [permissions, setPermissions] = useState<Set<Permission>>(new Set());
+  const [profilePersona, setProfilePersona] = useState<PersonaProfile | null>(null);
   const [activeModules, setActiveModules] = useState<AppModule[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -151,6 +156,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     if (!user) {
       setMemberships([]);
       setPermissions(new Set());
+      setProfilePersona(null);
       setLoading(false);
       return;
     }
@@ -198,9 +204,12 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     }
 
     // Permissions + modules for the active workspace (parallel).
-    const [permRes, modulesRes] = await Promise.all([
+    const [permRes, modulesRes, profileRes] = await Promise.all([
       apiFetch(institutionMePermissionsApi, "HR", { method: "GET" }),
       apiFetch(institutionMeModulesApi, "HR", { method: "GET" }),
+      ROLE_PERSONAS_V1
+        ? apiFetch(institutionMeProfileApi, "HR", { method: "GET" })
+        : Promise.resolve(null),
     ]);
 
     if (permRes && Array.isArray(permRes.permissions)) {
@@ -208,6 +217,14 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     } else {
       setPermissions(new Set());
     }
+
+    // Piste A endpoint is optional until merged: a 404 simply keeps the local mapping.
+    const profilePersonaFromApi = ROLE_PERSONAS_V1 ? readProfilePersona(profileRes) : null;
+    setProfilePersona(
+      profilePersonaFromApi
+        ? { ...(profileRes as PersonaProfile), persona: profilePersonaFromApi }
+        : null
+    );
 
     if (modulesRes && Array.isArray(modulesRes)) {
       setActiveModules(modulesRes as AppModule[]);
@@ -236,15 +253,24 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
         body: JSON.stringify({ institution_id: institutionId }),
       });
 
-      const [permRes, modulesRes] = await Promise.all([
+      const [permRes, modulesRes, profileRes] = await Promise.all([
         apiFetch(institutionMePermissionsApi, "HR", { method: "GET" }),
         apiFetch(institutionMeModulesApi, "HR", { method: "GET" }),
+        ROLE_PERSONAS_V1
+          ? apiFetch(institutionMeProfileApi, "HR", { method: "GET" })
+          : Promise.resolve(null),
       ]);
       if (permRes && Array.isArray(permRes.permissions)) {
         setPermissions(new Set(permRes.permissions as Permission[]));
       } else {
         setPermissions(new Set());
       }
+      const profilePersonaFromApi = ROLE_PERSONAS_V1 ? readProfilePersona(profileRes) : null;
+      setProfilePersona(
+        profilePersonaFromApi
+          ? { ...(profileRes as PersonaProfile), persona: profilePersonaFromApi }
+          : null
+      );
       if (modulesRes && Array.isArray(modulesRes)) {
         setActiveModules(modulesRes as AppModule[]);
       } else {
@@ -309,6 +335,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     roleResolved,
     permissions,
     hasPermission,
+    profilePersona,
     activeModules,
     hasModule,
     switchTo,

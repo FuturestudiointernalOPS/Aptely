@@ -34,7 +34,9 @@ export default function JitsiEmbed({ meetingUrl, displayName, onClose }: JitsiEm
 
   const roomName = meetingUrl.replace(/^https?:\/\/[^/]+\//, "");
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const initJitsi = useCallback(() => {
     if (!containerRef.current || !window.JitsiMeetExternalAPI || disposedRef.current) return;
