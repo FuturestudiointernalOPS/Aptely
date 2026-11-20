@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useWorkspace, type ModuleKey } from "@/lib/workspace";
 import { useTheme } from "@/lib/theme";
+import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
+import { usePersona } from "@/lib/usePersona";
+import type { Persona } from "@/lib/persona";
 import {
     getClientLocale,
     localizePath,
@@ -61,6 +64,8 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
     const pathname = usePathname();
     const { logout, user } = useAuth();
     const { active, isPersonal, hasModule, hasPermission, roleResolved } = useWorkspace();
+    const { persona } = usePersona();
+    const usePersonaNav = ROLE_PERSONAS_V1 && roleResolved;
     const { theme, setTheme } = useTheme();
     const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
     const [isMobile, setIsMobile] = useState(false);
@@ -84,6 +89,15 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
         const rs = active.membership.role_specialization;
         const label = active.membership.role_custom_label;
         if (label) return label;  // custom label set for ANY role (incl. OWNER)
+        if (usePersonaNav && rs !== "CUSTOM") {
+            const personaLabels: Record<string, string> = {
+                OWNER: translate("persona.owner", "Owner"),
+                HR: translate("persona.hr", "RH"),
+                INTERVIEWER: translate("persona.interviewer", "Interviewer"),
+                EMPLOYEE: translate("persona.employee", "Employé"),
+            };
+            return personaLabels[persona] ?? personaLabels.EMPLOYEE;
+        }
         const map: Record<string, string> = {
             OWNER: translate("perm.role.owner", "Propriétaire"),
             ADMIN: translate("perm.role.admin", "Administrateur"),
@@ -97,7 +111,7 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
         if (active.membership.status === "OWNER") return map.OWNER;
         if (active.membership.status === "ADMIN") return map.ADMIN;
         return map.MEMBER;
-    }, [active, translate, roleResolved]);
+    }, [active, translate, roleResolved, persona, usePersonaNav]);
 
     const [mounted, setMounted] = useState(false);
 
@@ -171,13 +185,15 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
         // CUSTOM roles aren't in any group → gate their nav by permission instead.
         const isCustom = effectiveRole === "CUSTOM";
         const can = (roles: string[]) => roles.includes(effectiveRole);
-        // Built-in roles use group membership; CUSTOM roles use their permission set.
-        const canItem = (roles: string[], perm: Parameters<typeof hasPermission>[0]) =>
-            isCustom ? hasPermission(perm) : roles.includes(effectiveRole);
+        // With the flag on, built-in roles navigate by persona; CUSTOM keeps permission gating.
+        const byPersona = usePersonaNav && !isCustom;
+        const canPersona = (...allowed: Persona[]) => byPersona && allowed.includes(persona);
+        const canItem = (roles: string[], perm: Parameters<typeof hasPermission>[0], personas: Persona[] = []) =>
+            isCustom ? hasPermission(perm) : canPersona(...personas) || (!byPersona && roles.includes(effectiveRole));
         // Fiches: nav = qui peut *voir* la liste. Création/édition restent gated par roles.create/update en page.
         const canRolesNav = isCustom
             ? (hasPermission("roles.create") || hasPermission("roles.update") || hasPermission("applications.view"))
-            : can(HR_FAMILY);
+            : canPersona("OWNER", "HR") || (!byPersona && can(HR_FAMILY));
         // Offres: permission réelle (pas seulement le groupe FULL_HR) — RECRUITER a offers.manage en DEFAULT_PERMISSIONS.
         const canOffersNav = hasPermission("offers.manage");
 
@@ -185,7 +201,7 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
         const rhItems: NavItem[] = [
             ...(canRolesNav ? [{ name: translate("nav.roles", "Fiches de poste"), href: localizePath(ROUTES.company.recruitment.roles, currentLocale), baseHref: ROUTES.company.recruitment.roles, icon: FileText }] : []),
             // "Candidatures" removed from sidebar — access via role pipeline (?app=) or direct link
-            ...(canItem(HR_FAMILY, "interviews.manage") ? [{ name: translate("nav.interviews", "Entretiens"), href: localizePath(ROUTES.company.recruitment.interviews, currentLocale), baseHref: ROUTES.company.recruitment.interviews, icon: CalendarRange }] : []),
+            ...(canItem(HR_FAMILY, "interviews.manage", ["OWNER", "HR", "INTERVIEWER"]) ? [{ name: translate("nav.interviews", "Entretiens"), href: localizePath(ROUTES.company.recruitment.interviews, currentLocale), baseHref: ROUTES.company.recruitment.interviews, icon: CalendarRange }] : []),
             // "Interviewer" removed from sidebar — merged into Entretiens page (tabs: Mes entretiens / Tous)
             // "Décisions" kanban removed — redondant avec le pipeline rôle (recommend/decide/ratify déjà accessible via ?app=)
             ...(canOffersNav ? [{ name: translate("nav.offers", "Offres"), href: localizePath(ROUTES.company.recruitment.offers, currentLocale), baseHref: ROUTES.company.recruitment.offers, icon: Gift }] : []),
@@ -193,16 +209,18 @@ export default function Sidebar({ isCollapsed: isCollapsedProp, setIsCollapsed, 
 
         // ─── Module visibility gates (Phase 4) ───────────────────────────────────
         // Built-in roles: group membership. CUSTOM: explicit permission.
-        const showEmployees = isCustom ? hasPermission("employees.view") : can(FULL_HR);
-        const showPayroll   = isCustom ? hasPermission("payroll.view") : can(FULL_HR);
-        const showGoals     = isCustom ? hasPermission("goals.view") : can(HR_FAMILY);
-        const showRetention = isCustom ? hasPermission("retention.view") : can(FULL_HR);
+        const showEmployees = isCustom ? hasPermission("employees.view") : canPersona("OWNER", "HR") || (!byPersona && can(FULL_HR));
+        const showPayroll   = isCustom ? hasPermission("payroll.view") : canPersona("OWNER", "HR") || (!byPersona && can(FULL_HR));
+        const showGoals     = isCustom ? hasPermission("goals.view") : canPersona("OWNER", "HR") || (!byPersona && can(HR_FAMILY));
+        const showRetention = isCustom ? hasPermission("retention.view") : canPersona("OWNER", "HR") || (!byPersona && can(FULL_HR));
 
         const adminItems: NavItem[] = [
-            ...((isCustom ? hasPermission("members.view") : can(ADMIN_ONLY))
+            ...((isCustom ? hasPermission("members.view")
+                : canPersona("OWNER") || (canPersona("HR") && hasPermission("members.view")) || (!byPersona && can(ADMIN_ONLY)))
                 ? [{ name: translate("nav.team", "Équipe"), href: localizePath(ROUTES.company.settings.hr, currentLocale), baseHref: ROUTES.company.settings.hr, icon: Users }]
                 : []),
-            ...((isCustom ? hasPermission("members.roles") : can(ADMIN_ONLY))
+            ...((isCustom ? hasPermission("members.roles")
+                : canPersona("OWNER") || (!byPersona && can(ADMIN_ONLY)))
                 ? [{ name: translate("nav.permissions", "Permissions"), href: localizePath(ROUTES.company.settings.permissions, currentLocale), baseHref: ROUTES.company.settings.permissions, icon: Shield }]
                 : []),
             { name: translate("nav.settings", "Paramètres"), href: localizePath(ROUTES.company.settings.settings, currentLocale), baseHref: ROUTES.company.settings.settings, icon: Settings },

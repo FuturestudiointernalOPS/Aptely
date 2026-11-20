@@ -48,6 +48,7 @@ import {
   API,
   institutionInvitationsApi,
 } from "@/lib/routes";
+import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
 
 // i18n label keys for built-in role_specialization values (role-change dropdown + badges).
 const ROLE_LABEL_KEYS: Record<string, [string, string]> = {
@@ -59,6 +60,30 @@ const ROLE_LABEL_KEYS: Record<string, [string, string]> = {
   RECRUITER: ["perm.role.recruiter", "Recruteur"],
   MEMBER: ["perm.role.member", "Membre"],
 };
+
+// B3 — invite personas shown to users; the DB specialization is set under the hood.
+// OWNER maps to ADMIN because a DB OWNER can only be created via ownership transfer.
+type InvitePersona = "OWNER" | "HR" | "INTERVIEWER" | "EMPLOYEE";
+const INVITE_PERSONA_ROLE: Record<InvitePersona, string> = {
+  OWNER: "ADMIN",
+  HR: "STANDARD_HR",
+  INTERVIEWER: "HIRING_MANAGER",
+  EMPLOYEE: "MEMBER",
+};
+const INVITE_PERSONA_LABELS: Record<InvitePersona, [string, string]> = {
+  OWNER: ["persona.owner", "Owner"],
+  HR: ["persona.hr", "RH"],
+  INTERVIEWER: ["persona.interviewer", "Interviewer"],
+  EMPLOYEE: ["persona.employee", "Employé"],
+};
+const INVITE_PERSONAS: InvitePersona[] = ["OWNER", "HR", "INTERVIEWER", "EMPLOYEE"];
+
+function personaForInviteRole(role: string): InvitePersona {
+  if (role === "OWNER" || role === "ADMIN") return "OWNER";
+  if (["HR_LEAD", "STANDARD_HR", "RECRUITER"].includes(role)) return "HR";
+  if (role === "HIRING_MANAGER") return "INTERVIEWER";
+  return "EMPLOYEE";
+}
 
 const STATUS_STYLE: Record<string, string> = {
   OWNER:
@@ -130,6 +155,7 @@ export default function TeamManagementPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<string>("MEMBER");
+  const [showAdvancedInvite, setShowAdvancedInvite] = useState(false);
   const [inviteJobPositionId, setInviteJobPositionId] = useState<string>("");
   const [jobPositions, setJobPositions] = useState<
     Array<{ id: string; title: string }>
@@ -1276,10 +1302,17 @@ export default function TeamManagementPage() {
           open
           onClose={() => setIsInviteModalOpen(false)}
           title={translate("institution.hr.addMembers", "Add members")}
-          description={translate(
-            "institution.hr.addMemberHint",
-            "Invite a new HR member by email, then approve the join request if needed.",
-          )}
+          description={
+            ROLE_PERSONAS_V1
+              ? translate(
+                  "institution.hr.invitePersonaHint",
+                  "Choisissez un profil : le rôle correspondant est appliqué automatiquement. L'option avancée permet de sélectionner un sous-rôle.",
+                )
+              : translate(
+                  "institution.hr.addMemberHint",
+                  "Invite a new HR member by email, then approve the join request if needed.",
+                )
+          }
           footer={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1329,48 +1362,118 @@ export default function TeamManagementPage() {
           }
         >
           <div className="space-y-4">
-            <FormField label={translate("institution.hr.inviteRole", "Rôle")}>
-              <Select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-              >
-                <option value="MEMBER">
-                  {translate(
-                    "institution.hr.role.member",
-                    "Employé (accès de base)",
+            {ROLE_PERSONAS_V1 ? (
+              <>
+                <FormField
+                  label={translate(
+                    "institution.hr.invitePersona",
+                    "Profil à inviter",
                   )}
-                </option>
-                {/* Only roles strictly below the inviter's rank (the backend enforces it). */}
-                {assignableRoles.includes("RECRUITER") && (
-                  <option value="RECRUITER">
-                    {translate("institution.hr.role.recruiter", "Recruteur")}
-                  </option>
+                >
+                  <Select
+                    value={personaForInviteRole(inviteRole)}
+                    onChange={(e) =>
+                      setInviteRole(
+                        INVITE_PERSONA_ROLE[e.target.value as InvitePersona] ??
+                          "MEMBER",
+                      )
+                    }
+                  >
+                    {INVITE_PERSONAS.filter((persona) =>
+                      assignableRoles.includes(INVITE_PERSONA_ROLE[persona]),
+                    ).map((persona) => (
+                      <option key={persona} value={persona}>
+                        {translate(
+                          INVITE_PERSONA_LABELS[persona][0],
+                          INVITE_PERSONA_LABELS[persona][1],
+                        )}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+
+                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                  <input
+                    type="checkbox"
+                    checked={showAdvancedInvite}
+                    onChange={(e) => setShowAdvancedInvite(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-[var(--accent)]"
+                  />
+                  {translate(
+                    "institution.hr.inviteAdvanced",
+                    "Choisir un sous-rôle précis",
+                  )}
+                </label>
+
+                {showAdvancedInvite && (
+                  <FormField
+                    label={translate(
+                      "institution.hr.inviteSubRole",
+                      "Sous-rôle (avancé)",
+                    )}
+                  >
+                    <Select
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value)}
+                    >
+                      {assignableRoles.map((role) => {
+                        const labelKey = ROLE_LABEL_KEYS[role];
+                        return (
+                          <option key={role} value={role}>
+                            {labelKey
+                              ? translate(labelKey[0], labelKey[1])
+                              : role}
+                          </option>
+                        );
+                      })}
+                    </Select>
+                  </FormField>
                 )}
-                {assignableRoles.includes("HIRING_MANAGER") && (
-                  <option value="HIRING_MANAGER">
+              </>
+            ) : (
+              <FormField label={translate("institution.hr.inviteRole", "Rôle")}>
+                <Select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                >
+                  <option value="MEMBER">
                     {translate(
-                      "institution.hr.role.hiringManager",
-                      "Hiring Manager",
+                      "institution.hr.role.member",
+                      "Employé (accès de base)",
                     )}
                   </option>
-                )}
-                {assignableRoles.includes("STANDARD_HR") && (
-                  <option value="STANDARD_HR">
-                    {translate("institution.hr.role.standardHr", "RH Standard")}
-                  </option>
-                )}
-                {assignableRoles.includes("HR_LEAD") && (
-                  <option value="HR_LEAD">
-                    {translate("institution.hr.role.hrLead", "Responsable RH")}
-                  </option>
-                )}
-                {assignableRoles.includes("ADMIN") && (
-                  <option value="ADMIN">
-                    {translate("institution.hr.role.admin", "Administrateur")}
-                  </option>
-                )}
-              </Select>
-            </FormField>
+                  {/* Only roles strictly below the inviter's rank (the backend enforces it). */}
+                  {assignableRoles.includes("RECRUITER") && (
+                    <option value="RECRUITER">
+                      {translate("institution.hr.role.recruiter", "Recruteur")}
+                    </option>
+                  )}
+                  {assignableRoles.includes("HIRING_MANAGER") && (
+                    <option value="HIRING_MANAGER">
+                      {translate(
+                        "institution.hr.role.hiringManager",
+                        "Hiring Manager",
+                      )}
+                    </option>
+                  )}
+                  {assignableRoles.includes("STANDARD_HR") && (
+                    <option value="STANDARD_HR">
+                      {translate("institution.hr.role.standardHr", "RH Standard")}
+                    </option>
+                  )}
+                  {assignableRoles.includes("HR_LEAD") && (
+                    <option value="HR_LEAD">
+                      {translate("institution.hr.role.hrLead", "Responsable RH")}
+                    </option>
+                  )}
+                  {assignableRoles.includes("ADMIN") && (
+                    <option value="ADMIN">
+                      {translate("institution.hr.role.admin", "Administrateur")}
+                    </option>
+                  )}
+                </Select>
+              </FormField>
+            )}
 
             {jobPositions.length > 0 && (
               <FormField

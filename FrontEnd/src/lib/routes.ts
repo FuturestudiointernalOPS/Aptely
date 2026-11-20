@@ -311,6 +311,10 @@ export const institutionMembershipsApi: ApiPath = p(
 export const institutionMePermissionsApi: ApiPath = p(
   `${API.institution}/me/permissions`,
 );
+/** Piste B — persona contract exposed by Piste A (may 404 until it is merged). */
+export const institutionMeProfileApi: ApiPath = p(
+  `${API.institution}/me/profile`,
+);
 export const institutionOwnerLabelApi: ApiPath = p(
   `${API.institution}/me/owner-label`,
 );

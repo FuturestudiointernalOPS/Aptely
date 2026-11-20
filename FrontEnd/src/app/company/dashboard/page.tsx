@@ -1,6 +1,7 @@
 import {
   getMeServer,
   getMyPermissionsServer,
+  getMyProfileServer,
   getDashboardStatsServer,
   getRecentRolesServer,
   getRecentApplicationsServer,
@@ -28,6 +29,8 @@ import { SessionRecovery } from "@/components/SessionRecovery";
 import { getServerLocale, t, Locale } from "@/lib/i18n";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ROUTES, createAuthRedirect, interviewNotesPath, rolePath } from "@/lib/routes";
+import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
+import { toPersona, type Persona } from "@/lib/persona";
 
 
 function relativeTime(iso: string, locale: Locale): string {
@@ -76,7 +79,8 @@ const FULL_LAYOUT: DashboardLayout = {
   team: true,
 };
 
-const LAYOUTS: Record<string, DashboardLayout> = {
+/** Legacy layouts — kept unchanged when ROLE_PERSONAS_V1 is off. */
+const LEGACY_LAYOUTS: Record<string, DashboardLayout> = {
   OWNER: FULL_LAYOUT,
   ADMIN: FULL_LAYOUT,
   HR_LEAD: FULL_LAYOUT,
@@ -88,6 +92,14 @@ const LAYOUTS: Record<string, DashboardLayout> = {
   // Custom roles: the full layout, narrowed by the role's own permissions.
   DEFAULT: FULL_LAYOUT,
   MEMBER: { stats: [], interviews: false, activity: false, roles: false, team: false },
+};
+
+/** Three dashboard variants (Option A) behind the flag — no extra routes. */
+const PERSONA_LAYOUTS: Record<Persona, DashboardLayout> = {
+  OWNER: FULL_LAYOUT,
+  HR: { stats: ["toProcess", "screening", "validated", "openRoles"], interviews: true, activity: true, roles: true, team: false },
+  INTERVIEWER: { stats: ["toProcess", "myInterviews", "evaluationsDue"], interviews: true, activity: true, roles: false, team: false },
+  EMPLOYEE: { stats: [], interviews: false, activity: false, roles: false, team: false },
 };
 
 function StatCard({ href, label, value }: { href: string; label: string; value: number }) {
@@ -142,22 +154,30 @@ export default async function DashboardPage() {
     );
   }
 
-  const [stats, roles, recentApplications, perms] = await Promise.all([
+  const [stats, roles, recentApplications, perms, personaProfile] = await Promise.all([
     getDashboardStatsServer(),
     getRecentRolesServer(5),
     getRecentApplicationsServer(5),
     getMyPermissionsServer(),
+    getMyProfileServer(),
   ]);
 
   // The owner has no role_specialization (only the OWNER membership status).
   const roleKey = perms.roleSpecialization ?? perms.membershipStatus ?? "";
-  const profileKey =
+  const persona = toPersona({
+    ...(personaProfile ?? {}),
+    roleSpecialization:
+      personaProfile?.roleSpecialization ?? personaProfile?.role_specialization ?? perms.roleSpecialization,
+    status: perms.membershipStatus,
+  });
+  const profileKey = ROLE_PERSONAS_V1 ? persona : (
     ["OWNER", "ADMIN", "HR_LEAD", "STANDARD_HR", "HIRING_MANAGER", "RECRUITER"].includes(roleKey)
       ? roleKey
       : ["MEMBER", "ACTIVE"].includes(roleKey)
       ? "MEMBER"
-      : "DEFAULT";
-  const layout = LAYOUTS[profileKey];
+      : "DEFAULT"
+  );
+  const layout = ROLE_PERSONAS_V1 ? PERSONA_LAYOUTS[persona] : LEGACY_LAYOUTS[profileKey];
   const PROFILE_DEFAULTS: Record<string, { title: string; subtitle: string }> = {
     OWNER: { title: "Company overview", subtitle: "Hiring and team at a glance" },
     ADMIN: { title: "Company administration", subtitle: "Team and hiring operations" },
@@ -165,6 +185,9 @@ export default async function DashboardPage() {
     STANDARD_HR: { title: "HR workspace", subtitle: "Applications, interviews and offers" },
     HIRING_MANAGER: { title: "Hiring manager workspace", subtitle: "Your candidates and interviews" },
     RECRUITER: { title: "Recruiter workspace", subtitle: "Applications to screen and your interviews" },
+    HR: { title: "HR workspace", subtitle: "Hiring pipeline, interviews and job posts" },
+    INTERVIEWER: { title: "Interviewer workspace", subtitle: "Your interviews and evaluations" },
+    EMPLOYEE: { title: "My workspace", subtitle: "Your company space" },
     MEMBER: { title: "My workspace", subtitle: "Your company space" },
     DEFAULT: { title: "Dashboard", subtitle: "Your company space" },
   };
@@ -179,10 +202,14 @@ export default async function DashboardPage() {
   const canMembers = can("members.view");
   // The team page itself is limited to owner/admin/HR lead (custom roles: members.view),
   // so the team block must follow the same rule or its link would lead to "access denied".
-  const canOpenTeamPage = ["OWNER", "ADMIN", "HR_LEAD"].includes(roleKey) || (roleKey === "CUSTOM" && canMembers);
+  const canOpenTeamPage = ROLE_PERSONAS_V1
+    ? persona === "OWNER" || ((persona === "HR" || roleKey === "CUSTOM") && canMembers)
+    : ["OWNER", "ADMIN", "HR_LEAD"].includes(roleKey) || (roleKey === "CUSTOM" && canMembers);
 
   // Interviewers only see the interviews they take part in; the others the company-wide upcoming ones.
-  const interviewsAssignedOnly = roleKey === "RECRUITER" || roleKey === "HIRING_MANAGER";
+  const interviewsAssignedOnly = ROLE_PERSONAS_V1
+    ? persona === "INTERVIEWER"
+    : roleKey === "RECRUITER" || roleKey === "HIRING_MANAGER";
   const myInterviews = interviewsAssignedOnly && canInterviews ? await getMyInterviewsServer(3) : null;
   const interviews = myInterviews
     ? myInterviews.upcoming
