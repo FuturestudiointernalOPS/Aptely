@@ -6,7 +6,6 @@ import { persistActiveWorkspace } from "@/lib/apiHelper";
 import { ROLE_PERSONAS_V1 } from "@/lib/featureFlags";
 import { readProfilePersona, type PersonaProfile } from "@/lib/persona";
 import {
-  API,
   institutionMembershipsApi,
   institutionMePermissionsApi,
   institutionMeProfileApi,
